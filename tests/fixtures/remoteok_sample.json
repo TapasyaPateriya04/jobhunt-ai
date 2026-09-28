@@ -1,0 +1,42 @@
+[
+  {"last_updated": 1790000000, "legal": "API Terms of Service: Please link back to the URL on Remote OK and mention Remote OK as a source."},
+  {
+    "slug": "senior-python-developer-acme-100001",
+    "id": "100001",
+    "epoch": 1790550000,
+    "date": "2026-09-27T12:00:00+00:00",
+    "company": "Acme Corp",
+    "position": "Senior Python Developer",
+    "tags": ["python", "django", "aws", "backend"],
+    "description": "<p>We are hiring a <strong>Python</strong> developer.</p><ul><li>5+ years of experience with Django</li><li>AWS &amp; Docker</li></ul>",
+    "location": "Worldwide",
+    "salary_min": 90000,
+    "salary_max": 130000,
+    "apply_url": "https://remoteok.com/remote-jobs/100001/apply",
+    "url": "https://remoteok.com/remote-jobs/senior-python-developer-acme-100001"
+  },
+  {
+    "slug": "frontend-engineer-globex-100002",
+    "id": "100002",
+    "epoch": 1790460000,
+    "date": "2026-09-26T11:00:00+00:00",
+    "company": "Globex",
+    "position": "Frontend Engineer",
+    "tags": ["react", "typescript"],
+    "description": "<p>React and TypeScript. 2-4 yrs experience.</p>",
+    "location": "USA",
+    "url": "https://remoteok.com/remote-jobs/frontend-engineer-globex-100002"
+  },
+  {
+    "slug": "data-engineer-initech-100003",
+    "id": "100003",
+    "epoch": 1790370000,
+    "date": "2026-09-25T10:00:00+00:00",
+    "company": "Initech",
+    "position": "Data Engineer",
+    "tags": ["spark", "airflow"],
+    "description": "<div>Build pipelines in <b>Python</b> and Apache Spark.<br>3+ years required.</div>",
+    "location": "",
+    "url": "https://remoteok.com/remote-jobs/data-engineer-initech-100003"
+  }
+]

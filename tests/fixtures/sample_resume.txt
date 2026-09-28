@@ -1,0 +1,16 @@
+John Smith
+john@example.com | github.com/jsmith
+
+PROFESSIONAL SUMMARY
+Full-stack developer who likes TypeScript, Node.js and cloud infrastructure.
+
+Skills: JavaScript, TypeScript, Node.js, React, C#, .NET Core, Azure, MongoDB, HotChocolate
+
+WORK EXPERIENCE
+Full Stack Developer | Initech | 03/2020 - Present
+- Built React dashboards and Node.js APIs
+Junior Developer, Globex Corp — Jul 2017 to Feb 2020
+- Maintained ASP.NET services in C#
+
+EDUCATION
+B.Tech Computer Science, Some Institute, 2013 - 2017

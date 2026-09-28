@@ -1,0 +1,68 @@
+%-------------------------
+% Sample resume based on a common "Jake's Resume" style template
+%-------------------------
+\documentclass[letterpaper,11pt]{article}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\resumeItem}[1]{\item\small{{#1 \vspace{-2pt}}}}
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\begin{document}
+
+\begin{center}
+    \textbf{\Huge Jane Doe} \\
+    \small 555-123-4567 $|$ \href{mailto:jane@example.com}{jane@example.com} $|$
+    \href{https://github.com/janedoe}{github.com/janedoe}
+\end{center}
+
+\section{Summary}
+Backend engineer with a focus on Python services, data pipelines and applied machine learning.
+Enjoys building reliable APIs and mentoring junior developers.
+
+\section{Experience}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {Acme Corp}{San Francisco, CA}
+      {Senior Software Engineer}{Jan 2021 -- Present}
+      \resumeItemListStart
+        \resumeItem{Built REST APIs with \textbf{FastAPI} and PostgreSQL serving 2M requests/day}
+        \resumeItem{Migrated services to Docker and Kubernetes on AWS}
+      \resumeItemListEnd
+
+    \resumeSubheading
+      {Globex Inc}{Remote}
+      {Software Engineer}{Jun 2018 -- Dec 2020}
+      \resumeItemListStart
+        \resumeItem{Developed ETL pipelines in Python with Apache Airflow}
+        \resumeItem{Wrote C++ extensions and a small C\# tool for Windows clients}
+      \resumeItemListEnd
+  \resumeSubHeadingListEnd
+
+\section{Projects}
+  \resumeItem{\textbf{JobHunt AI} -- resume matcher using scikit-learn and Streamlit}
+
+\section{Education}
+  \resumeSubheading
+    {State University}{Austin, TX}
+    {B.S. in Computer Science}{Aug 2014 -- May 2018}
+
+\section{Technical Skills}
+ \begin{itemize}
+    \small{\item{
+     \textbf{Languages}{: Python, Java, C++, C\#, SQL, JavaScript, TypeScript} \\
+     \textbf{Frameworks}{: FastAPI, Django, React, Node.js} \\
+     \textbf{Developer Tools}{: Git, Docker, Kubernetes, AWS, CI/CD, Terraform, WidgetFlow} \\
+     \textbf{Libraries}{: pandas, NumPy, scikit-learn, PyTorch}
+    }}
+ \end{itemize}
+
+\end{document}

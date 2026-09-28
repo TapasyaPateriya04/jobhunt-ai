@@ -1,0 +1,13 @@
+# Lightweight set used by CI/tests: no torch, no browsers, no spaCy model.
+beautifulsoup4
+requests
+pylatexenc
+scikit-learn
+numpy
+sqlalchemy
+streamlit
+pandas
+python-dotenv
+loguru
+rich
+pytest
