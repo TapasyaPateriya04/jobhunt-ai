@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+.env
+*.db
+*.sqlite3
+resume.tex
+uploads/
+jobhunt_docs/
+.pytest_cache/
+.streamlit/secrets.toml
