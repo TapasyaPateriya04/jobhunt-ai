@@ -1,4 +1,5 @@
 [server]
+address = "localhost"
 maxUploadSize = 2
 headless = true
 enableXsrfProtection = true

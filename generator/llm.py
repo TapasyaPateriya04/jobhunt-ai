@@ -36,13 +36,13 @@ def _call_ollama(prompt: str, settings) -> str:
 
 def _call_gemini(prompt: str, settings) -> str:
     try:
-        import google.generativeai as genai  # lazy optional import
+        from google import genai  # lazy optional import (google-genai SDK)
     except ImportError as exc:
-        raise LLMUnavailable("Gemini fallback needs the 'google-generativeai' package "
-                             "(pip install google-generativeai).") from exc
-    genai.configure(api_key=settings.gemini_api_key)
-    model = genai.GenerativeModel(settings.gemini_model)
-    result = model.generate_content(prompt)
+        raise LLMUnavailable("Gemini fallback needs the 'google-genai' package "
+                             "(pip install google-genai).") from exc
+    client = genai.Client(api_key=settings.gemini_api_key)
+    result = client.models.generate_content(
+        model=settings.gemini_model, contents=prompt, config={"temperature": 0.4})
     text = (getattr(result, "text", "") or "").strip()
     if not text:
         raise LLMUnavailable("Gemini returned an empty response (possibly blocked by safety filters).")

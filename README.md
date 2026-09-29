@@ -41,6 +41,11 @@ python scripts/init_db.py                          # creates jobhunt.db
 streamlit run ui/app.py                            # open http://localhost:8501
 ```
 
+On Windows: if `spacy download` fails with a 404, install the model wheel directly with
+`pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl`.
+Ollama installs with `winget install Ollama.Ollama`. On a CPU-only laptop the first Mistral
+generation can take about two minutes.
+
 Or run the whole pipeline from the terminal:
 
 ```bash

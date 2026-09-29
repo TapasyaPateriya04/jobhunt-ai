@@ -38,7 +38,7 @@ def clean_env(monkeypatch):
     for k in ("USE_OLLAMA", "OLLAMA_BASE_URL", "OLLAMA_MODEL", "GEMINI_API_KEY", "ALLOW_REMOTE_LLM"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr("config.load_dotenv", lambda *a, **k: False, raising=False)
-    monkeypatch.setitem(sys.modules, "google.generativeai", None)  # force "not installed"
+    monkeypatch.setitem(sys.modules, "google.genai", None)  # force "not installed"
 
     def boom(*a, **kw):
         raise AssertionError("unexpected network call")
@@ -84,40 +84,44 @@ def test_call_llm_model_missing(monkeypatch):
         llm.call_llm("hi")
 
 
+def _fake_genai(monkeypatch, client_cls):
+    fake = types.ModuleType("google.genai")
+    fake.Client = client_cls
+    google_pkg = types.ModuleType("google")
+    google_pkg.genai = fake
+    monkeypatch.setitem(sys.modules, "google", google_pkg)
+    monkeypatch.setitem(sys.modules, "google.genai", fake)
+
+
 def test_call_llm_gemini_fallback(monkeypatch):
     monkeypatch.setenv("USE_OLLAMA", "false")
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
     configured = {}
 
-    class Model:
-        def __init__(self, name):
-            configured["model"] = name
-
-        def generate_content(self, prompt):
+    class Models:
+        def generate_content(self, model, contents, config=None):
+            configured.update(model=model, contents=contents)
             return types.SimpleNamespace(text="From Gemini")
 
-    fake = types.ModuleType("google.generativeai")
-    fake.configure = lambda api_key: configured.update(key=api_key)
-    fake.GenerativeModel = Model
-    google_pkg = types.ModuleType("google")
-    google_pkg.generativeai = fake
-    monkeypatch.setitem(sys.modules, "google", google_pkg)
-    monkeypatch.setitem(sys.modules, "google.generativeai", fake)
+    class Client:
+        def __init__(self, api_key):
+            configured["key"] = api_key
+            self.models = Models()
+
+    _fake_genai(monkeypatch, Client)
     assert llm.call_llm("hi") == "From Gemini"
-    assert configured == {"key": "test-key-123", "model": "gemini-1.5-flash"}
+    assert configured == {"key": "test-key-123", "model": "gemini-3.8-flash", "contents": "hi"}
 
 
 def test_call_llm_gemini_error_does_not_leak_key(monkeypatch):
     monkeypatch.setenv("USE_OLLAMA", "false")
     monkeypatch.setenv("GEMINI_API_KEY", "secret-key-xyz")
-    fake = types.ModuleType("google.generativeai")
 
-    def bad_configure(api_key):
-        raise RuntimeError(f"invalid key {api_key}")
+    class Client:
+        def __init__(self, api_key):
+            raise RuntimeError(f"invalid key {api_key}")
 
-    fake.configure = bad_configure
-    monkeypatch.setitem(sys.modules, "google.generativeai", fake)
-    monkeypatch.setitem(sys.modules, "google", types.SimpleNamespace(generativeai=fake))
+    _fake_genai(monkeypatch, Client)
     with pytest.raises(llm.LLMUnavailable) as ei:
         llm.call_llm("hi")
     assert "secret-key-xyz" not in str(ei.value)
@@ -164,7 +168,7 @@ def test_save_generated_doc(monkeypatch, tmp_path):
     path = Path(save_generated_doc(3, "cover_letter", "Dear Hiring Manager,\x00 hi"))
     assert path.parent == (tmp_path / "docs").resolve()
     assert path.name.startswith("match3_cover_letter_")
-    assert path.read_text() == "Dear Hiring Manager, hi"
+    assert path.read_text(encoding="utf-8") == "Dear Hiring Manager, hi"
     assert calls[0][:3] == (3, "cover_letter", "Dear Hiring Manager, hi")
     assert calls[0][3] == str(path)
 

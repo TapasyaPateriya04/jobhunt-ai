@@ -60,7 +60,7 @@ def test_latex_experience_entries(latex_resume):
 
 
 def test_plain_text_resume():
-    parsed = parse_resume_text((FIX / "sample_resume.txt").read_text())
+    parsed = parse_resume_text((FIX / "sample_resume.txt").read_text(encoding="utf-8"))
     assert CONTRACT_KEYS <= set(parsed)
     assert parsed["summary"].startswith("Full-stack developer")
     assert {"C#", ".NET", "Node.js", "TypeScript", "HotChocolate"} <= set(parsed["skills"])

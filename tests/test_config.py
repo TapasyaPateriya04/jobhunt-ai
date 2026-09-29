@@ -26,7 +26,7 @@ def test_defaults():
     assert s.ollama_base_url == "http://localhost:11434"
     assert s.ollama_model == "mistral"
     assert s.gemini_api_key is None
-    assert s.gemini_model == "gemini-1.5-flash"
+    assert s.gemini_model == "gemini-3.8-flash"
     assert s.docs_dir == Path("~/jobhunt_docs").expanduser()
     assert s.scrape_delay_seconds == 3.0
     assert s.max_jobs_per_session == 50
@@ -70,7 +70,7 @@ def test_dotenv_file_loaded_without_overriding_env(monkeypatch, tmp_path):
     for name in ENV_VARS:
         monkeypatch.delenv(name, raising=False)
     env_file = tmp_path / "custom.env"
-    env_file.write_text("OLLAMA_MODEL=llama3\nGEMINI_MODEL=from-file\n")
+    env_file.write_text("OLLAMA_MODEL=llama3\nGEMINI_MODEL=from-file\n", encoding="utf-8")
     monkeypatch.setenv("GEMINI_MODEL", "from-env")
     s = config.get_settings(env_file=env_file)
     assert s.ollama_model == "llama3"

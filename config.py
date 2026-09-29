@@ -53,7 +53,7 @@ class Settings:
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "mistral"
     gemini_api_key: Optional[str] = field(default=None, repr=False)  # never printed
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     docs_dir: Path = field(default_factory=lambda: Path("~/jobhunt_docs").expanduser())
     scrape_delay_seconds: float = 3.0
     max_jobs_per_session: int = 50

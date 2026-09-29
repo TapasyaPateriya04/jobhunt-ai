@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -99,7 +100,7 @@ def test_html_to_text():
 
 # ---------------------------------------------------------------- RemoteOK
 def _remoteok_payload():
-    return json.loads((FIX / "remoteok_sample.json").read_text())
+    return json.loads((FIX / "remoteok_sample.json").read_text(encoding="utf-8"))
 
 
 def test_parse_remoteok_skips_legal_and_filters():
@@ -145,8 +146,8 @@ def test_fetch_remoteok_network_error(monkeypatch):
 
 # ---------------------------------------------------------------- HN
 def test_fetch_hn_whos_hiring(monkeypatch):
-    story = json.loads((FIX / "hn_story.json").read_text())
-    comments = json.loads((FIX / "hn_comments.json").read_text())
+    story = json.loads((FIX / "hn_story.json").read_text(encoding="utf-8"))
+    comments = json.loads((FIX / "hn_comments.json").read_text(encoding="utf-8"))
     seen = []
 
     def fake_get(url, params=None, headers=None, timeout=None):
@@ -225,8 +226,11 @@ def test_build_urls_are_encoded():
     assert naukri_url("Python", "Remote") == "https://www.naukri.com/python-jobs"
 
 
-def test_playwright_scraper_without_playwright_returns_empty():
-    # playwright isn't installed in the test environment
+def test_playwright_scraper_without_playwright_returns_empty(monkeypatch):
+    # Simulate Playwright being absent (it may be installed locally) and skip the live robots check.
+    monkeypatch.setitem(sys.modules, "playwright", None)
+    monkeypatch.setitem(sys.modules, "playwright.async_api", None)
+    monkeypatch.setattr("scraper.net.check_allowed", lambda url: None)
     assert asyncio.run(scrape_indeed("python", "remote", 5)) == []
 
 
@@ -266,8 +270,8 @@ def test_scrape_jobs_respects_session_cap(monkeypatch):
 
 
 def test_scrape_jobs_default_sources_end_to_end(monkeypatch):
-    story = json.loads((FIX / "hn_story.json").read_text())
-    comments = json.loads((FIX / "hn_comments.json").read_text())
+    story = json.loads((FIX / "hn_story.json").read_text(encoding="utf-8"))
+    comments = json.loads((FIX / "hn_comments.json").read_text(encoding="utf-8"))
 
     def fake_get(url, params=None, headers=None, timeout=None):
         if "remoteok" in url:

@@ -73,8 +73,11 @@ def test_keyword_gap_matched_and_missing():
 
 
 # ------------------------------------------------------------------ semantic
-def test_semantic_fallback_active_and_ranks():
-    assert semantic_matcher.get_model() is None  # sentence-transformers not installed in CI
+def test_semantic_fallback_active_and_ranks(monkeypatch):
+    # Force the TF-IDF fallback even when sentence-transformers is installed locally.
+    monkeypatch.setattr(semantic_matcher, "_model", None)
+    monkeypatch.setattr(semantic_matcher, "_model_failed", True)
+    assert semantic_matcher.get_model() is None
     r = PY_RESUME["raw_text"]
     s_py, s_nurse = semantic_score(r, PY_JOB["description"]), semantic_score(r, NURSE_JOB["description"])
     assert 0 <= s_nurse < s_py <= 100

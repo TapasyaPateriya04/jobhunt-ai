@@ -2,14 +2,14 @@
 
 Python 3.10+. Package root is the repo root; run the app with `streamlit run ui/app.py`
 (ui/app.py inserts the repo root onto sys.path). Heavy/optional deps (spacy,
-sentence-transformers, playwright, google-generativeai) MUST be imported lazily and the
+sentence-transformers, playwright, google-genai) MUST be imported lazily and the
 code MUST degrade gracefully when they are missing (tests run without them).
 
 ## config.py (owner: security)
 - `get_settings() -> Settings` dataclass loaded from env/.env via python-dotenv:
   `database_url` (default `sqlite:///jobhunt.db`), `use_ollama` (bool, default True),
   `ollama_base_url` (default `http://localhost:11434`), `ollama_model` (default `mistral`),
-  `gemini_api_key` (Optional[str]), `gemini_model` (default `gemini-1.5-flash`),
+  `gemini_api_key` (Optional[str]), `gemini_model` (default `gemini-3.8-flash`),
   `docs_dir` (default `~/jobhunt_docs`), `scrape_delay_seconds` (default 3.0),
   `max_jobs_per_session` (default 50), `upload_max_bytes` (default 2_000_000).
 

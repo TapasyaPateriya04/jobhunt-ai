@@ -61,7 +61,10 @@ def test_safe_join_rejects_symlink_escape(tmp_path):
     outside.mkdir()
     base = tmp_path / "base"
     base.mkdir()
-    (base / "link").symlink_to(outside)
+    try:
+        (base / "link").symlink_to(outside)
+    except OSError:  # Windows without admin rights / Developer Mode can't create symlinks
+        pytest.skip("symlinks not permitted on this system")
     with pytest.raises(ValueError):
         safe_join(base, "link/secret.txt")
 
@@ -238,13 +241,15 @@ def test_rate_limiter_thread_safe():
             stamps.append(time.monotonic())
 
     threads = [threading.Thread(target=worker) for _ in range(4)]
+    start = time.monotonic()
     for t in threads:
         t.start()
     for t in threads:
         t.join()
     stamps.sort()
-    gaps = [b - a for a, b in zip(stamps, stamps[1:])]
-    assert all(g >= 0.02 for g in gaps)
+    # The i-th caller may not run before its reserved slot. Checking against slots (not
+    # gaps between wake-ups) keeps this stable with Windows' coarse sleep timer.
+    assert all(stamp - start >= i * 0.03 - 0.001 for i, stamp in enumerate(stamps))
 
 
 def test_rate_limiter_async():
