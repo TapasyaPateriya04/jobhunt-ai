@@ -16,8 +16,8 @@ from scraper import net
 from scraper.arbeitnow_scraper import fetch_arbeitnow
 from scraper.ats_boards import fetch_greenhouse, fetch_lever
 from scraper.hn_scraper import fetch_hn_whos_hiring
+from scraper.muse_scraper import fetch_muse
 from scraper.remoteok_scraper import fetch_remoteok
-from scraper.remotive_scraper import fetch_remotive
 
 pytestmark = pytest.mark.live
 
@@ -42,7 +42,7 @@ def _check(jobs: list[dict], source: str) -> None:
 @pytest.mark.parametrize("source, fetch", [
     ("remoteok", lambda: fetch_remoteok(KEYWORDS, max_jobs=5)),
     ("hn", lambda: fetch_hn_whos_hiring(KEYWORDS, max_jobs=5)),
-    ("remotive", lambda: fetch_remotive(KEYWORDS, max_jobs=5)),
+    ("themuse", lambda: fetch_muse(KEYWORDS, "Bangalore, India", max_jobs=5)),
     ("arbeitnow", lambda: fetch_arbeitnow(KEYWORDS, max_jobs=5)),
     ("greenhouse", lambda: fetch_greenhouse(KEYWORDS, max_jobs=5, boards=["gitlab"])),
     ("lever", lambda: fetch_lever(KEYWORDS, max_jobs=5, companies=["palantir"])),
@@ -55,6 +55,7 @@ def test_api_source_returns_normalized_jobs(source, fetch):
     "https://remoteok.com/api",
     "https://hn.algolia.com/api/v1/search",
     "https://www.arbeitnow.com/api/job-board-api",
+    "https://www.themuse.com/api/public/jobs",
     "https://boards-api.greenhouse.io/v1/boards/gitlab/jobs",
     "https://api.lever.co/v0/postings/palantir",
 ])

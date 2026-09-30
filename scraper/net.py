@@ -38,22 +38,14 @@ def limiter_for(url: str) -> RateLimiter:
         return _limiters[host]
 
 
-# Documented public APIs whose host serves robots.txt behind a bot challenge (HTTP 403), so
-# the fail-closed robots check can never pass. The site publishes these endpoints for
-# programmatic use; only the exact API prefix is exempt, never the rest of the site.
-ROBOTS_EXEMPT_API_PREFIXES = ("https://remotive.com/api/",)
-
-
 def check_allowed(url: str) -> None:
     if not is_allowed_url(url):
         raise FetchBlocked(f"URL not on the allowlist: {url}")
-    if url.startswith(ROBOTS_EXEMPT_API_PREFIXES):
-        return
     if not can_fetch(url, USER_AGENT):
         raise FetchBlocked(f"robots.txt disallows (or could not be checked for) {url}")
 
 
-def polite_get_json(url: str, params: dict | None = None, timeout=DEFAULT_TIMEOUT):
+def polite_get_json(url: str, params: dict | list | None = None, timeout=DEFAULT_TIMEOUT):
     """GET ``url`` and return decoded JSON, after allowlist/robots checks and rate limiting.
 
     Raises ``FetchBlocked`` if disallowed and ``requests.RequestException``/``ValueError``

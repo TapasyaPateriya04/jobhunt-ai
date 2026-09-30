@@ -11,7 +11,7 @@ from loguru import logger
 
 from config import get_settings
 
-DEFAULT_SOURCES = ["remoteok", "hn", "remotive", "arbeitnow"]
+DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow"]
 # Browser scrapers of sites that restrict automated access (robots.txt, bot protection,
 # Terms of Service). Never on by default; they usually return nothing.
 EXPERIMENTAL_SOURCES = ["indeed", "linkedin", "naukri"]
@@ -36,9 +36,9 @@ def _source_fn(name: str) -> Callable[[str, str, int], list[dict]] | None:
     if name == "hn":
         from scraper.hn_scraper import fetch_hn_whos_hiring
         return lambda kw, loc, n: fetch_hn_whos_hiring(kw, max_jobs=n)
-    if name == "remotive":
-        from scraper.remotive_scraper import fetch_remotive
-        return lambda kw, loc, n: fetch_remotive(kw, max_jobs=n)
+    if name == "themuse":
+        from scraper.muse_scraper import fetch_muse
+        return lambda kw, loc, n: fetch_muse(kw, loc, max_jobs=n)
     if name == "arbeitnow":
         from scraper.arbeitnow_scraper import fetch_arbeitnow
         return lambda kw, loc, n: fetch_arbeitnow(kw, max_jobs=n)

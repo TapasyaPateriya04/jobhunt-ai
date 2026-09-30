@@ -1,4 +1,4 @@
-"""Remotive, Arbeitnow, Greenhouse and Lever sources plus the shared relevance filter.
+"""The Muse, Arbeitnow, Greenhouse and Lever sources plus the shared relevance filter.
 
 Payloads are trimmed copies of real API responses (2026-09-30). No network is used.
 """
@@ -9,7 +9,7 @@ import requests
 
 from scraper import ats_boards, net, service
 from scraper.arbeitnow_scraper import fetch_arbeitnow, parse_arbeitnow
-from scraper.remotive_scraper import fetch_remotive, parse_remotive
+from scraper.muse_scraper import MAX_REQUESTS, fetch_muse, muse_locations, parse_muse
 from scraper.relevance import relevance, select_relevant
 
 JOB_KEYS = {"title", "company", "location", "description", "source", "url", "posted_date",
@@ -86,56 +86,69 @@ def test_select_relevant_orders_and_caps():
     assert [j["t"] for j in picked] == ["Python Developer", "Python Engineer"]
 
 
-# ---------------------------------------------------------------- Remotive
-REMOTIVE = {"0-legal-notice": "Remotive API Legal Notice", "job-count": 3, "jobs": [
-    {"id": 1, "url": "https://remotive.com/remote-jobs/software-dev/python-developer-1",
-     "title": "Python Developer", "company_name": "KoboToolbox", "category": "Software Development",
-     "tags": ["django", "python"], "job_type": "full_time",
-     "publication_date": "2026-09-18T16:43:22", "candidate_required_location": "USA, Canada",
-     "salary": "$80k - $100k", "description": "<p>Build <b>Django</b> APIs. 3+ years of experience.</p>"},
-    {"id": 2, "url": "https://remotive.com/remote-jobs/software-dev/net-developer-2",
-     "title": "Senior .NET Developer", "company_name": "Lemon.io", "category": "Software Development",
-     "tags": ["python", "C#"], "publication_date": "2026-09-17T13:22:05",
-     "candidate_required_location": "", "description": "<p>C# work, maybe some Python.</p>" + LONG},
-    {"id": 3, "url": "https://remotive.com/remote-jobs/support/office-assistant-3",
-     "title": "Remote Office Assistant", "company_name": "Acme", "category": "Customer Service",
-     "tags": [], "publication_date": "2026-09-16T12:35:28", "description": "<p>Calendars.</p>"},
+# ---------------------------------------------------------------- The Muse
+def _muse_job(id_, name, locations, level="Mid Level", contents="<p>Java and Spring Boot. Java APIs.</p>"):
+    return {"id": id_, "name": name, "contents": contents, "publication_date": "2026-09-17T10:00:00Z",
+            "locations": [{"name": n} for n in locations], "categories": [{"name": "Software Engineering"}],
+            "levels": [{"name": level, "short_name": level.split()[0].lower()}],
+            "refs": {"landing_page": f"https://www.themuse.com/jobs/acme/job-{id_}"},
+            "company": {"id": 1, "short_name": "acme", "name": "Acme"}}
+
+
+MUSE_PAGE = {"page": 1, "page_count": 50, "total": 1000, "results": [
+    _muse_job(1, "Java Developer", ["Bangalore, India", "Chennai, India"], "Senior Level",
+              "<div><p>Build <b>Java</b> services.</p><ul><li>5+ years of experience</li></ul></div>"),
+    _muse_job(2, "Senior Backend Engineer (Java)", ["Flexible / Remote", "San Francisco, CA"]),
+    _muse_job(3, "Account Manager", ["Bangalore, India"], contents="<p>Sell things.</p>"),
 ]}
 
 
-def test_parse_remotive():
-    (job,) = parse_remotive(REMOTIVE, "Python Developer", 10)
-    assert set(job) == JOB_KEYS
-    assert (job["title"], job["company"], job["source"]) == ("Python Developer", "KoboToolbox", "remotive")
-    assert job["location"] == "USA, Canada" and job["experience_years"] == 3
-    assert job["posted_date"].year == 2026 and job["url"].startswith("https://remotive.com/")
-    assert "<" not in job["description"] and "Tags: django, python" in job["description"]
-    assert "Salary: $80k - $100k" in job["description"]
-    assert parse_remotive({"jobs": None}) == [] and parse_remotive([]) == []
-    assert len(parse_remotive(REMOTIVE, "", 10)) == 3  # no keywords: everything
+def test_muse_locations():
+    assert muse_locations("Remote") == muse_locations("") == muse_locations(None) == ["Flexible / Remote"]
+    assert muse_locations("Bangalore, India; Gurgaon, India ;Bangalore, India") == [
+        "Bangalore, India", "Gurgaon, India"]
+    assert muse_locations("Pune, India; remote") == ["Pune, India", "Flexible / Remote"]
 
 
-def test_fetch_remotive_searches_specific_terms_and_skips_robots(monkeypatch):
-    calls = {}
+def test_parse_muse():
+    jobs = parse_muse(MUSE_PAGE, "Java Developer", 10)
+    assert [j["title"] for j in jobs] == ["Java Developer", "Senior Backend Engineer (Java)"]
+    job = jobs[0]
+    assert set(job) == JOB_KEYS and job["source"] == "themuse" and job["company"] == "Acme"
+    assert job["location"] == "Bangalore, India; Chennai, India" and job["experience_years"] == 5
+    assert "<" not in job["description"] and job["description"].endswith("Level: Senior Level")
+    assert job["url"] == "https://www.themuse.com/jobs/acme/job-1" and job["posted_date"].year == 2026
+    assert parse_muse({"results": None}) == [] and parse_muse([]) == []
+
+
+def test_fetch_muse_filters_city_and_caps_requests(monkeypatch):
+    calls = []
 
     def fake_get(url, params=None, headers=None, timeout=None):
-        calls.update(url=url, params=params)
-        return FakeResp(REMOTIVE)
+        calls.append(dict(params))
+        return FakeResp(MUSE_PAGE)
 
     monkeypatch.setattr(requests, "get", fake_get)
-    # Remotive serves robots.txt behind a bot challenge; its documented API is exempt.
-    monkeypatch.setattr(net, "can_fetch", lambda url, ua="": False)
-    assert len(fetch_remotive("Python Developer", 5)) == 1
-    assert calls == {"url": "https://remotive.com/api/remote-jobs", "params": {"search": "python"}}
+    jobs = fetch_muse("Java Developer", "Bangalore, India; Gurgaon, India", max_jobs=10)
+    # The API mixes remote jobs into a city search; only the city's own jobs are kept.
+    assert [j["title"] for j in jobs] == ["Java Developer"]
+    assert len(calls) == MAX_REQUESTS and {c["category"] for c in calls} == {"Software Engineering"}
+    assert [(c["page"], c["location"]) for c in calls[:3]] == [
+        (1, "Bangalore, India"), (1, "Gurgaon, India"), (2, "Bangalore, India")]
+
+    calls.clear()
+    remote = fetch_muse("Java Developer", "Remote", max_jobs=1)
+    assert [j["title"] for j in remote] == ["Java Developer"] and len(calls) == 1  # stops when full
+    assert calls[0]["location"] == "Flexible / Remote"
 
 
-def test_robots_exemption_is_only_the_api_prefix(monkeypatch):
+def test_no_source_is_exempt_from_robots(monkeypatch):
     monkeypatch.setattr(net, "can_fetch", lambda url, ua="": False)
-    net.check_allowed("https://remotive.com/api/remote-jobs")
-    for url in ("https://remotive.com/remote-jobs", "https://remoteok.com/api",
-                "https://remotive.com.evil.example/api/x"):
+    for url in ("https://www.themuse.com/api/public/jobs", "https://remoteok.com/api",
+                "https://www.arbeitnow.com/api/job-board-api"):
         with pytest.raises(net.FetchBlocked):
             net.check_allowed(url)
+    assert fetch_muse("java") == [] and fetch_arbeitnow("java") == []
 
 
 def test_fetch_api_sources_swallow_network_errors(monkeypatch):
@@ -143,7 +156,7 @@ def test_fetch_api_sources_swallow_network_errors(monkeypatch):
         raise requests.ConnectionError("down")
 
     monkeypatch.setattr(requests, "get", fail)
-    assert fetch_remotive("python") == [] and fetch_arbeitnow("python") == []
+    assert fetch_muse("python") == [] and fetch_arbeitnow("python") == []
     assert ats_boards.fetch_greenhouse("python", boards=["gitlab"]) == []
     assert ats_boards.fetch_lever("python", companies=["palantir"]) == []
 

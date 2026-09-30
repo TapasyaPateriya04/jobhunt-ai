@@ -215,9 +215,21 @@ def test_save_match_accepts_column_names_and_keeps_status(db_session):
     assert repo.list_matches(rid, session=db_session)[0]["status"] == "saved"
 
 
+def test_save_resume_same_text_reuses_row(db_session):
+    first = repo.save_resume(PARSED, "old/path.pdf", session=db_session)
+    again = repo.save_resume({**PARSED, "skills": ["Rust"]}, "new/path.pdf", session=db_session)
+    assert again == first  # re-running the pipeline must not pile up copies
+    stored = repo.get_resume(first, session=db_session)
+    assert stored["skills"] == ["Rust"] and stored["file_path"] == "new/path.pdf"
+    other = repo.save_resume({**PARSED, "raw_text": "A different resume"}, "x", session=db_session)
+    assert other != first
+    # Resumes with no text are never merged with each other.
+    assert repo.save_resume({}, "", session=db_session) != repo.save_resume({}, "", session=db_session)
+
+
 def test_list_matches_sorted_and_joined(db_session):
     rid = repo.save_resume(PARSED, "r", session=db_session)
-    other = repo.save_resume(PARSED, "r2", session=db_session)
+    other = repo.save_resume({**PARSED, "raw_text": "A different resume"}, "r2", session=db_session)
     repo.upsert_jobs([_job(i) for i in range(4)], session=db_session)
     jobs = repo.list_jobs(session=db_session)
     for j, score in zip(jobs, [10, 90, None, 50]):

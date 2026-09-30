@@ -23,7 +23,7 @@ MATCH_STATUSES = ["new", "saved", "applied", "rejected"]
 SOURCES = {
     "remoteok": "RemoteOK (free public API)",
     "hn": "Hacker News 'Who's Hiring' (Algolia API)",
-    "remotive": "Remotive (free public API)",
+    "themuse": "The Muse (free public API, uses Location, e.g. Bangalore, India)",
     "arbeitnow": "Arbeitnow (free public API, mostly Europe)",
     "greenhouse": "Greenhouse company boards (set GREENHOUSE_BOARDS in .env)",
     "lever": "Lever company boards (set LEVER_COMPANIES in .env)",
@@ -31,11 +31,11 @@ SOURCES = {
     "linkedin": "LinkedIn (experimental: blocked by robots.txt)",
     "naukri": "Naukri (experimental: blocks automated browsers)",
 }
-DEFAULT_SOURCES = ["remoteok", "hn", "remotive", "arbeitnow"]
+DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow"]
 EXPERIMENTAL_SOURCES = ["indeed", "linkedin", "naukri"]
 
 ETHICAL_NOTE = (
-    "**Scrape responsibly.** Prefer official/free APIs (RemoteOK, HN Who's Hiring, Remotive, "
+    "**Scrape responsibly.** Prefer official/free APIs (RemoteOK, HN Who's Hiring, The Muse, "
     "Arbeitnow, Greenhouse and Lever company boards). For HTML portals the scraper checks "
     "`robots.txt` and skips disallowed sites, waits 3-5 s between requests, caps each "
     "session at 20-50 jobs, and caches results so the same job is never re-scraped. "

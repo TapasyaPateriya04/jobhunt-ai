@@ -177,21 +177,29 @@ def _document_to_dict(d: Document) -> dict:
 # --------------------------------------------------------------------------- resumes
 
 def save_resume(parsed: dict, file_path: str, *, session: Optional[Session] = None) -> int:
-    """Persist a parsed resume dict; returns the new resume id."""
+    """Persist a parsed resume dict; returns its resume id.
+
+    Saving a resume whose text is already stored refreshes that row (newer parse, path and
+    timestamp) and returns its id, so re-running the pipeline does not pile up copies.
+    """
     parsed = parsed or {}
     skills = parsed.get("skills") or []
     experience = parsed.get("experience") or []
+    raw_text = parsed.get("raw_text") or ""
     with _scope(session) as s:
-        r = Resume(
-            file_path=_str_or_none(file_path),
-            raw_text=parsed.get("raw_text") or "",
-            skills_json=json.dumps(list(skills), ensure_ascii=False, default=str),
-            experience_json=json.dumps(list(experience), ensure_ascii=False, default=str),
-            education=_str_or_none(parsed.get("education")),
-            summary=_str_or_none(parsed.get("summary")),
-            created_at=utcnow(),
-        )
-        s.add(r)
+        r = None
+        if raw_text.strip():
+            r = s.scalars(select(Resume).where(Resume.raw_text == raw_text)
+                          .order_by(Resume.id).limit(1)).first()
+        if r is None:
+            r = Resume(raw_text=raw_text)
+            s.add(r)
+        r.file_path = _str_or_none(file_path)
+        r.skills_json = json.dumps(list(skills), ensure_ascii=False, default=str)
+        r.experience_json = json.dumps(list(experience), ensure_ascii=False, default=str)
+        r.education = _str_or_none(parsed.get("education"))
+        r.summary = _str_or_none(parsed.get("summary"))
+        r.created_at = utcnow()
         s.flush()
         return int(r.id)
 

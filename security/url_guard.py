@@ -13,7 +13,7 @@ ALLOWED_JOB_HOSTS: frozenset[str] = frozenset({
     "remoteok.io",
     "hn.algolia.com",
     "news.ycombinator.com",
-    "remotive.com",
+    "themuse.com",
     "arbeitnow.com",
     "boards-api.greenhouse.io",
     "api.lever.co",

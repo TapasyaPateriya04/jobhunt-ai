@@ -30,7 +30,7 @@ code MUST degrade gracefully when they are missing (tests run without them).
   (Job also has `location`, `posted_date`, `experience_years` nullable int, and a UNIQUE `url` / dedupe hash;
   Match has `experience_score`, `freshness_score`, `status` default "new", `calculated_at`).
   `get_engine(url=None)`, `init_db(engine=None)`, `get_session()` context manager.
-- `db/repository.py`: `save_resume(parsed: dict, file_path: str) -> int`, `get_resume(id) -> dict|None`,
+- `db/repository.py`: `save_resume(parsed: dict, file_path: str) -> int` (same resume text reuses its row), `get_resume(id) -> dict|None`,
   `latest_resume() -> dict|None`, `upsert_jobs(jobs: list[dict]) -> int` (returns new count; dedupe on url or
   title+company+location hash), `list_jobs(limit=50) -> list[dict]`, `get_job(id) -> dict|None`,
   `save_match(resume_id, job_id, scores: dict) -> int`, `list_matches(resume_id, limit=50) -> list[dict]`
@@ -47,14 +47,14 @@ code MUST degrade gracefully when they are missing (tests run without them).
 - `scraper/hn_scraper.py`: `fetch_hn_whos_hiring(keywords, max_jobs=20) -> list[dict]` (HN Algolia API).
 - `scraper/relevance.py`: `relevance(keywords, title, tags="", description="") -> int` (0 = off-topic) and
   `select_relevant(items, keywords, max_jobs, fields)`; every API source filters through it.
-- `scraper/remotive_scraper.py`: `fetch_remotive(keywords, max_jobs=20)`; `scraper/arbeitnow_scraper.py`:
+- `scraper/muse_scraper.py`: `fetch_muse(keywords, location="Remote", max_jobs=20)`; `scraper/arbeitnow_scraper.py`:
   `fetch_arbeitnow(keywords, max_jobs=20)` (free public JSON APIs; default sources).
 - `scraper/ats_boards.py`: `fetch_greenhouse(keywords, max_jobs=20, boards=None)`, `fetch_lever(keywords, max_jobs=20,
   companies=None)` (public job-board APIs for the company slugs in settings; [] when none configured).
 - `scraper/indeed_scraper.py`, `linkedin_scraper.py`, `naukri_scraper.py`: EXPERIMENTAL async Playwright+BS4 scrapers per SPEC §5.2,
   each checks robots via `security.robots.can_fetch` and uses RateLimiter; fail gracefully (return []) when playwright missing.
 - `scraper/__init__.py` or `scraper/service.py`: `scrape_jobs(keywords, location, max_jobs, sources: list[str]) -> list[dict]`;
-  `DEFAULT_SOURCES` (remoteok, hn, remotive, arbeitnow), `EXPERIMENTAL_SOURCES` (indeed, linkedin, naukri), `ALL_SOURCES`.
+  `DEFAULT_SOURCES` (remoteok, hn, themuse, arbeitnow), `EXPERIMENTAL_SOURCES` (indeed, linkedin, naukri), `ALL_SOURCES`.
 - `parser/resume_parser.py`: `parse_resume_text(text) -> dict`, `parse_latex_resume(path) -> dict`,
   `parse_resume_bytes(filename, data) -> dict` (.tex/.txt/.md; .pdf optional) returning
   `{"raw_text","skills": list[str],"experience": list[dict],"education": str,"summary": str}`.

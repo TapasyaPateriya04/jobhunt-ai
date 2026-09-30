@@ -225,6 +225,9 @@ def test_parse_hn_comment_header_with_links_and_no_role():
     job = hn_scraper.parse_hn_comment({"objectID": "2", "comment_text": (
         "Solution Street | Northern Virginia - HYBRID &amp; ONSITE<p>We are a consulting company.")})
     assert job["company"] == "Solution Street" and job["title"] == "Software role"
+    # A candidate's "who wants to be hired" style post is not a job.
+    assert hn_scraper.parse_hn_comment({"objectID": "3", "comment_text": (
+        "Location: London, UK<p>Remote: Yes<p>Willing to relocate: No<p>Technologies: Python")}) is None
 
 
 def test_parse_linkedin_html():
@@ -297,8 +300,8 @@ def test_scrape_jobs_default_sources_end_to_end(monkeypatch):
     def fake_get(url, params=None, headers=None, timeout=None):
         if "remoteok" in url:
             return FakeResp(_remoteok_payload())
-        if "remotive" in url or "arbeitnow" in url:
-            return FakeResp({"jobs": [], "data": []})
+        if "themuse" in url or "arbeitnow" in url:
+            return FakeResp({"results": [], "data": []})
         return FakeResp(story if "search_by_date" in url else comments)
 
     monkeypatch.setattr(requests, "get", fake_get)
