@@ -34,6 +34,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         "(greenhouse/lever need GREENHOUSE_BOARDS/LEVER_COMPANIES in .env); "
                         "experimental, usually blocked: indeed,linkedin,naukri")
     p.add_argument("--top", type=int, default=20, help="Rows to show in the results table")
+    p.add_argument("--country", default=None,
+                   help="Your home country; jobs you cannot take are ranked down "
+                        "(default: CANDIDATE_COUNTRY from .env, empty = ignore location)")
     p.add_argument("--db", default=None, help="Database URL override (default: DATABASE_URL or sqlite:///jobhunt.db)")
     p.add_argument("--no-save", action="store_true", help="Score only; don't write resume/jobs/matches to the DB")
     p.add_argument("--verbose", "-v", action="store_true", help="Debug logging")
@@ -129,7 +132,7 @@ def run(args: argparse.Namespace) -> list[dict]:
         ids_by_hash = {j["dedupe_hash"]: j["id"] for j in repo.list_jobs(limit=1000) if j.get("dedupe_hash")}
 
     # 4. Score
-    scored = score_jobs(resume, jobs)
+    scored = score_jobs(resume, jobs, country=args.country)
 
     # 5. Save matches
     if not args.no_save and resume_id is not None:

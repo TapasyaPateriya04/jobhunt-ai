@@ -45,9 +45,11 @@ WEIGHT_MIXES = {
 }
 
 
-def load_labels() -> dict[str, int]:
+def load_labels() -> tuple[dict[str, int], str]:
+    """Labels by job URL, and the home country the labels were made for."""
     doc = json.loads(LABELS_FILE.read_text(encoding="utf-8"))
-    return {ev.job_key(j): int(j["label"]) for j in doc["jobs"] if j.get("url")}
+    return ({ev.job_key(j): int(j["label"]) for j in doc["jobs"] if j.get("url")},
+            str(doc.get("candidate_country") or ""))
 
 
 def write_snapshot(labels: dict[str, int]) -> None:
@@ -93,27 +95,33 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--weights", action="store_true", help="compare alternative weight mixes")
     ap.add_argument("--resume", help="score with this resume file instead of the snapshot")
     ap.add_argument("--top", type=int, default=15, help="rows of the ranking to print")
+    ap.add_argument("--no-location", action="store_true", help="ignore the candidate's home country")
     args = ap.parse_args(argv)
 
-    labels = load_labels()
+    labels, country = load_labels()
+    if args.no_location:
+        country = ""
     if args.snapshot:
         write_snapshot(labels)
         return 0
     resume, jobs = load_inputs(args.resume)
-    ranked = ev.rank(resume, jobs, labels)
+    ranked = ev.rank(resume, jobs, labels, country=country)
     m = ev.metrics(ranked)
     print(f"semantic backend: {backend_name()}   labeled jobs scored: {m['n']} "
-          f"({m['good']} good, {m['partial']} partial)   weights: {WEIGHTS}\n")
+          f"({m['good']} good, {m['partial']} partial)   weights: {WEIGHTS}   "
+          f"home country: {country or 'not used'}\n")
     show_metrics("current", m)
+    if country:
+        show_metrics("without location", ev.metrics(ev.rank(resume, jobs, labels)))
 
-    print(f"\n{'#':>2}  {'fit':<7} {'total':>5} {'ats':>5} {'sem':>5} {'exp':>5} {'fresh':>5}  req  job")
+    print(f"\n{'#':>2}  {'fit':<7} {'total':>5} {'ats':>5} {'sem':>5} {'exp':>5} {'fresh':>5}  req  location     job")
     names = {ev.GOOD: "GOOD", ev.PARTIAL: "partial", ev.BAD: "-"}
     for i, j in enumerate(ranked[:args.top], 1):
         s = j["scores"]
         req = "?" if s.get("required_years") is None else s["required_years"]
         print(f"{i:>2}  {names[j['label']]:<7} {s['total']:>5} {s['ats']:>5} {s['semantic']:>5} "
-              f"{s['experience']:>5} {s['freshness']:>5}  {str(req):>3}  "
-              f"{str(j.get('title'))[:44]} @ {str(j.get('company'))[:18]}")
+              f"{s['experience']:>5} {s['freshness']:>5}  {str(req):>3}  {s['location_status']:<11}  "
+              f"{str(j.get('title'))[:40]} @ {str(j.get('company'))[:16]}")
     missed = [(i, j) for i, j in enumerate(ranked, 1) if j["label"] >= ev.PARTIAL and i > args.top]
     for i, j in missed:
         print(f"{i:>2}  {names[j['label']]:<7} {j['scores']['total']:>5}  (below the cut)  "
@@ -122,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.weights:
         print("\nWeight mixes (same component scores, different blend):")
         for name, w in WEIGHT_MIXES.items():
-            show_metrics(name, ev.metrics(ev.rank(resume, jobs, labels, ev.weighted_total(w))))
+            show_metrics(name, ev.metrics(ev.rank(resume, jobs, labels, ev.weighted_total(w), country)))
     return 0
 
 

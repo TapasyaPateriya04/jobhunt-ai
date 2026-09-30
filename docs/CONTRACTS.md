@@ -12,7 +12,8 @@ code MUST degrade gracefully when they are missing (tests run without them).
   `gemini_api_key` (Optional[str]), `gemini_model` (default `gemini-3.8-flash`),
   `docs_dir` (default `~/jobhunt_docs`), `scrape_delay_seconds` (default 3.0),
   `max_jobs_per_session` (default 50), `upload_max_bytes` (default 2_000_000),
-  `greenhouse_boards` / `lever_companies` (tuples of company slugs from comma-separated env, default empty).
+  `greenhouse_boards` / `lever_companies` (tuples of company slugs from comma-separated env, default empty),
+  `candidate_country` (default `""` = ignore location), `candidate_cities` (tuple).
 
 ## security/ (owner: security)
 - `security/sanitize.py`: `sanitize_text(s: str, max_len: int = 20000) -> str` (strip control chars, limit length),
@@ -74,6 +75,11 @@ code MUST degrade gracefully when they are missing (tests run without them).
   `total, ats, experience, semantic, freshness` using weights 0.35/0.30/0.25/0.10 (plus `ats_raw`, `skill_coverage`,
   `candidate_years`, `required_years`); `score_jobs(resume, jobs) -> list[dict]`; `required_years_for(job)`,
   `seniority_years(job)`. `ats` = half calibrated TF-IDF, half `ats_scorer.skill_coverage`.
+- `matching/location.py`: `location_fit(job, country, cities=()) -> {"status", "score", "reason"}` with status
+  `local | remote_open | remote | unknown | restricted | elsewhere`; `location_factor(score)` multiplies the total
+  (1.0 .. 0.4). `score_jobs` / `calculate_confidence_score` take optional `country`, `cities` (default: settings
+  `candidate_country`, `candidate_cities`; `""` disables) and add `base_total`, `location_status`, `location_score`,
+  `location_reason` to the scores.
 - `matching/evaluation.py`: `precision_at_k`, `ndcg_at_k`, `rank`, `metrics` for `scripts/evaluate_matching.py`
   (labels in `eval/labeled_jobs.json`: 2 good, 1 partial, 0 bad).
 

@@ -101,6 +101,10 @@ The score is `0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness`:
   with no cue at all the score is a neutral 70.
 - **Semantic**: MiniLM sentence-embedding similarity, scaled from the range seen on real postings.
 - **Freshness**: newer postings score higher.
+- **Location**: set `CANDIDATE_COUNTRY` in `.env` (for example `India`) and the total is multiplied
+  by 1.0 for a job in your country, 0.94 for worldwide remote, down to 0.4 for a job on-site abroad
+  or restricted to other countries, time zones or a language you were not asked about. The Matches
+  tab can hide those jobs and filter by the years of experience a posting asks for.
 
 These weights differ from the plan's 0.35/0.25/0.20/0.20 because they were measured:
 
@@ -110,10 +114,11 @@ python scripts/evaluate_matching.py --weights    # precision@5, nDCG@10 and a ra
 ```
 
 `eval/labeled_jobs.json` holds 52 real postings labeled good / partial / bad fit for one resume.
-On that set precision@5 went from 0.00 (plan weights and formulas) to 0.60. Edit the labels if
-you disagree with them, add your own, and re-run after any change under `matching/`. The set is
-small, so treat differences of one job in the top 5 as noise. The score does not know where you
-are allowed to work: postings limited to another country can still rank high.
+On that set precision@5 went from 0.00 (plan weights and formulas) to 0.60, and nDCG@10 from
+0.07 to 0.85 once the home country is used. Edit the labels if you disagree with them, add your
+own, and re-run after any change under `matching/`. The set is small, so treat differences of
+one job in the top 5 as noise. Location rules are keyword-based (`matching/location.py`): a
+restriction worded in an unusual way can be missed, so read the posting before applying.
 
 ## Tests
 

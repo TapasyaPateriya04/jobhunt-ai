@@ -61,6 +61,8 @@ class Settings:
     allow_remote_llm: bool = False
     greenhouse_boards: tuple[str, ...] = ()
     lever_companies: tuple[str, ...] = ()
+    candidate_country: str = ""
+    candidate_cities: tuple[str, ...] = ()
 
 
 def _env_list(name: str) -> tuple[str, ...]:
@@ -85,4 +87,6 @@ def get_settings(env_file: Optional[str | os.PathLike[str]] = None) -> Settings:
         allow_remote_llm=_env_bool("ALLOW_REMOTE_LLM", False),
         greenhouse_boards=_env_list("GREENHOUSE_BOARDS"),
         lever_companies=_env_list("LEVER_COMPANIES"),
+        candidate_country=(os.getenv("CANDIDATE_COUNTRY") or "").strip(),
+        candidate_cities=_env_list("CANDIDATE_CITIES"),
     )

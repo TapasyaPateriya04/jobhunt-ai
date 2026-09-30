@@ -6,6 +6,10 @@ The SPEC's 0.35/0.25/0.20/0.20 put a week-old perfect match below a fresh poor o
 Measured on 52 hand-labeled real jobs (scripts/evaluate_matching.py), halving freshness
 and moving that weight to experience and semantic raised precision@5. ``ats`` is half
 TF-IDF keyword overlap and half skill coverage (share of the posting's skills the resume has).
+
+When a home country is set (``CANDIDATE_COUNTRY``), the total is then multiplied by a
+location factor from ``matching.location``: 1.0 for a job in that country down to 0.4 for
+one restricted to somewhere else. With no country set the factor is always 1.0.
 """
 from __future__ import annotations
 
@@ -14,6 +18,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Iterable, List, Optional, Tuple
 
 from matching.ats_scorer import batch_raw_cosines, blended_ats, calibrate, skill_coverage
+from matching.location import location_factor, location_fit
 from matching.semantic_matcher import semantic_scores
 from parser.skills_vocab import find_skills
 
@@ -333,11 +338,17 @@ def experience_score(resume_exp: Any, required_years: Optional[float]) -> float:
 
 def _combine(ats: float, ats_raw: float, exp: float, sem: float, fresh: float,
              candidate_years: float, required_years: Optional[int],
-             coverage: Optional[float] = None) -> dict:
-    total = (WEIGHTS["ats"] * ats + WEIGHTS["experience"] * exp
-             + WEIGHTS["semantic"] * sem + WEIGHTS["freshness"] * fresh)
+             coverage: Optional[float] = None, location: Optional[dict] = None) -> dict:
+    base = (WEIGHTS["ats"] * ats + WEIGHTS["experience"] * exp
+            + WEIGHTS["semantic"] * sem + WEIGHTS["freshness"] * fresh)
+    location = location or {"status": "unknown", "score": 100.0, "reason": ""}
+    total = base * location_factor(location["score"])
     return {
         "total": round(max(0.0, min(100.0, total)), 1),
+        "base_total": round(max(0.0, min(100.0, base)), 1),
+        "location_status": location["status"],
+        "location_score": location["score"],
+        "location_reason": location["reason"],
         "ats": round(ats, 1),
         "experience": round(exp, 1),
         "semantic": round(sem, 1),
@@ -349,7 +360,22 @@ def _combine(ats: float, ats_raw: float, exp: float, sem: float, fresh: float,
     }
 
 
-def _score_batch(resume: dict, jobs: List[dict]) -> List[dict]:
+def _home(country: Optional[str], cities: Optional[Iterable[str]]) -> Tuple[str, Tuple[str, ...]]:
+    """Explicit country/cities, else the ones configured in settings (``""`` = no filter)."""
+    if country is not None:
+        return country, tuple(cities or ())
+    try:
+        from config import get_settings
+
+        s = get_settings()
+        return s.candidate_country, tuple(cities or s.candidate_cities)
+    except Exception:  # scoring must never fail because of configuration
+        return "", ()
+
+
+def _score_batch(resume: dict, jobs: List[dict], country: Optional[str] = None,
+                 cities: Optional[Iterable[str]] = None) -> List[dict]:
+    country, cities = _home(country, cities)
     rtext = resume_text(resume)
     jtexts = [job_text(j) for j in jobs]
     raws = batch_raw_cosines(rtext, jtexts)  # single TF-IDF fit across the batch
@@ -362,21 +388,25 @@ def _score_batch(resume: dict, jobs: List[dict]) -> List[dict]:
         coverage = skill_coverage(have, jtext)
         out.append(_combine(blended_ats(calibrate(raw), coverage), raw * 100.0,
                             experience_score(cand, req), sem,
-                            freshness_score((job or {}).get("posted_date")), cand, req, coverage))
+                            freshness_score((job or {}).get("posted_date")), cand, req, coverage,
+                            location_fit(job, country, cities)))
     return out
 
 
-def calculate_confidence_score(resume: dict, job: dict) -> dict:
-    """Scores for one resume/job pair: total, ats, experience, semantic, freshness (+ ats_raw)."""
-    return _score_batch(resume or {}, [job or {}])[0]
+def calculate_confidence_score(resume: dict, job: dict, country: Optional[str] = None,
+                               cities: Optional[Iterable[str]] = None) -> dict:
+    """Scores for one resume/job pair: total, ats, experience, semantic, freshness (+ ats_raw,
+    location_*). ``country=None`` uses the configured home country; ``""`` disables it."""
+    return _score_batch(resume or {}, [job or {}], country, cities)[0]
 
 
-def score_jobs(resume: dict, jobs: Iterable[dict]) -> List[dict]:
+def score_jobs(resume: dict, jobs: Iterable[dict], country: Optional[str] = None,
+               cities: Optional[Iterable[str]] = None) -> List[dict]:
     """Return shallow copies of jobs with a "scores" dict attached, sorted by total desc."""
     jobs = [j for j in (jobs or []) if isinstance(j, dict)]
     if not jobs:
         return []
-    scores = _score_batch(resume or {}, jobs)
+    scores = _score_batch(resume or {}, jobs, country, cities)
     result = [{**j, "scores": s} for j, s in zip(jobs, scores)]
     result.sort(key=lambda j: j["scores"]["total"], reverse=True)
     return result

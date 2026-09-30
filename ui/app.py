@@ -33,6 +33,8 @@ class _FallbackSettings:
         self.docs_dir = os.getenv("DOCS_DIR", "~/jobhunt_docs")
         self.max_jobs_per_session = 50
         self.upload_max_bytes = 2_000_000
+        self.candidate_country = os.getenv("CANDIDATE_COUNTRY", "").strip()
+        self.candidate_cities = tuple(x.strip() for x in os.getenv("CANDIDATE_CITIES", "").split(",") if x.strip())
 
 
 def get_settings():
@@ -255,12 +257,12 @@ def _gap(resume_text: str, jd_text: str) -> dict:
     return load("matching.ats_scorer", "keyword_gap")(resume_text, jd_text, top_n=15)
 
 
-def _score_and_save(resume: dict) -> int:
+def _score_and_save(resume: dict, country: str = "", cities: tuple = ()) -> int:
     r = repo()
-    jobs = r.list_jobs(limit=200)
+    jobs = r.list_jobs(limit=500)
     if not jobs:
         return 0
-    results = load("matching.confidence_score", "score_jobs")(resume, jobs)
+    results = load("matching.confidence_score", "score_jobs")(resume, jobs, country=country, cities=cities)
     saved = 0
     for i, res in enumerate(results or []):
         if not isinstance(res, dict):
@@ -277,34 +279,90 @@ def _score_and_save(resume: dict) -> int:
     return saved
 
 
-def tab_matches(resume: dict | None) -> None:
+# Location statuses a candidate cannot act on (see matching/location.py).
+BLOCKED_LOCATIONS = ("restricted", "elsewhere")
+ANY_YEARS = 15
+
+
+def _annotate(matches: list[dict], resume: dict, country: str, cities: tuple) -> float:
+    """Attach location fit and years asked to each match (cheap rules, recomputed on the
+    fly so no database change is needed). Returns the candidate's years of experience."""
+    fit = load("matching.location", "location_fit")
+    labels = load("matching.location", "LABELS")
+    cs = load("matching.confidence_score")
+    for m in matches:
+        try:
+            loc = fit(m, country, cities) if country else None
+            m["_loc_status"] = loc["status"] if loc else ""
+            m["_loc_text"] = f"{labels[loc['status']]}: {loc['reason']}" if loc else ""
+            m["_years"] = cs.required_years_for(m)
+        except Exception:
+            c.log.exception("match annotation failed")
+            m["_loc_status"], m["_loc_text"], m["_years"] = "", "", None
+    try:
+        return float(cs.estimate_candidate_years(c.as_list(g(resume, "experience", default=[]))))
+    except Exception:
+        return 0.0
+
+
+def tab_matches(resume: dict | None, settings=None) -> None:
     st.subheader("Job matches")
     if not resume or g(resume, "id") is None:
         st.info("Upload a resume first (Resume tab).")
         return
 
-    col_a, col_b = st.columns([1, 3])
-    if col_a.button("Score stored jobs", type="primary"):
+    cfg_country = str(getattr(settings, "candidate_country", "") or "")
+    cities = tuple(getattr(settings, "candidate_cities", ()) or ())
+    top = st.columns([1, 2, 2])
+    country = top[1].text_input(
+        "Your country", value=cfg_country, key="home_country",
+        help="Jobs restricted to other countries, time zones or languages are ranked down. "
+             "Leave empty to ignore location. Set CANDIDATE_COUNTRY in .env to make it stick.").strip()
+    min_score = top[2].slider("Minimum confidence", 0, 100, 0, step=5)
+    if top[0].button("Score stored jobs", type="primary"):
         with friendly_errors("score jobs"), st.spinner("Scoring jobs against your resume..."):
-            n = _score_and_save(resume)
+            n = _score_and_save(resume, country, cities)
             if n:
                 st.success(f"Scored {n} jobs.")
             else:
                 st.warning("No jobs to score yet - scrape some first.")
-    min_score = col_b.slider("Minimum confidence", 0, 100, 0, step=5)
 
     with friendly_errors("load matches"):
-        matches = repo().list_matches(resume["id"], limit=200)
+        matches = repo().list_matches(resume["id"], limit=500)
         if not matches:
             st.info("No matches yet. Scrape jobs, then click **Score stored jobs**.")
             return
-        shown = [m for m in matches if float(g(m, "confidence_score", "total", default=0) or 0) >= min_score]
-        st.caption(f"{len(shown)} of {len(matches)} matches at or above {min_score}%. "
-                   "Click a column header to sort.")
+        my_years = _annotate(matches, resume, country, cities)
+
+        f1, f2, f3 = st.columns([2, 2, 2])
+        hide_blocked = f1.checkbox("Only jobs I can take", value=bool(country), disabled=not country,
+                                   help="Hides jobs on-site in another country or restricted to "
+                                        "other countries, time zones or languages.")
+        default_years = min(ANY_YEARS, int(my_years + 0.999) + 2)
+        max_years = f2.slider("Asks for at most (years)", 0, ANY_YEARS, default_years,
+                              help=f"Your resume shows about {my_years:g} years. "
+                                   f"{ANY_YEARS} shows every level.")
+        keep_unknown = f3.checkbox("Include jobs that state no years", value=True)
+
+        def keep(m: dict) -> bool:
+            if float(g(m, "confidence_score", "total", default=0) or 0) < min_score:
+                return False
+            if hide_blocked and m["_loc_status"] in BLOCKED_LOCATIONS:
+                return False
+            if m["_years"] is None:
+                return keep_unknown
+            return max_years >= ANY_YEARS or m["_years"] <= max_years
+
+        shown = [m for m in matches if keep(m)]
+        st.caption(f"{len(shown)} of {len(matches)} matches shown, best first. "
+                   "Click a column header to sort. If the list looks stale, click **Score stored jobs**.")
         if not shown:
+            st.info("No matches pass these filters. Raise the years limit or untick a filter.")
             return
         df = pd.DataFrame([{
             "Company": g(m, "company"), "Title": g(m, "title"), "Location": g(m, "location"),
+            "Can I take it?": m["_loc_text"] or "-",
+            "Asks (yrs)": m["_years"],
             "Total": g(m, "confidence_score", "total"), "ATS": g(m, "ats_score", "ats"),
             "Semantic": g(m, "semantic_score", "semantic"),
             "Experience": g(m, "experience_score", "experience"),
@@ -314,6 +372,9 @@ def tab_matches(resume: dict | None) -> None:
         pct = lambda label: st.column_config.ProgressColumn(label, min_value=0, max_value=100, format="%.0f")  # noqa: E731
         st.dataframe(df, hide_index=True, use_container_width=True, column_config={
             "Total": pct("Total"), "ATS": st.column_config.NumberColumn("ATS", format="%.0f"),
+            "Asks (yrs)": st.column_config.NumberColumn(
+                "Asks (yrs)", format="%d", help="Years of experience the posting asks for; stated, "
+                                                "or implied by words like Senior or Junior."),
             "Semantic": st.column_config.NumberColumn("Semantic", format="%.0f"),
             "Experience": st.column_config.NumberColumn("Experience", format="%.0f"),
             "Freshness": st.column_config.NumberColumn("Freshness", format="%.0f"),
@@ -338,6 +399,10 @@ def _match_detail(m: dict, resume_text: str) -> None:
                                            ("Experience", ("experience_score", "experience")),
                                            ("Freshness", ("freshness_score", "freshness"))]):
             col.metric(lbl, c.fmt_score(g(m, *keys)))
+        facts = [t for t in (m.get("_loc_text"),
+                             None if m.get("_years") is None else f"Asks for {m['_years']}+ years") if t]
+        if facts:
+            st.caption(" · ".join(facts))
         url = g(m, "url")
         if url:
             st.markdown(f"[View posting]({url})")
@@ -531,7 +596,7 @@ def main() -> None:
             tab_scrape(settings)
     with t3:
         with friendly_errors("show the matches tab"):
-            tab_matches(resume)
+            tab_matches(resume, settings)
     with t4:
         with friendly_errors("show the documents tab"):
             tab_generate(resume)

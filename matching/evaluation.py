@@ -8,6 +8,7 @@ import math
 from typing import Callable, Dict, List, Optional, Sequence
 
 from matching.confidence_score import WEIGHTS, score_jobs
+from matching.location import location_factor
 
 GOOD, PARTIAL, BAD = 2, 1, 0
 
@@ -32,10 +33,11 @@ def job_key(job: dict) -> str:
 
 
 def rank(resume: dict, jobs: List[dict], label_by_url: Dict[str, int],
-         total: Optional[Callable[[dict], float]] = None) -> List[dict]:
+         total: Optional[Callable[[dict], float]] = None, country: str = "") -> List[dict]:
     """Score ``jobs`` and return them best first, each with ``scores`` and ``label``.
-    ``total`` optionally recomputes the ranking score from the component scores."""
-    ranked = [{**j, "label": label_by_url[job_key(j)]} for j in score_jobs(resume, jobs)
+    ``total`` optionally recomputes the ranking score from the component scores.
+    ``country`` is the candidate's home country ("" = ignore location)."""
+    ranked = [{**j, "label": label_by_url[job_key(j)]} for j in score_jobs(resume, jobs, country=country)
               if job_key(j) in label_by_url]
     if total is not None:
         ranked.sort(key=lambda j: total(j["scores"]), reverse=True)
@@ -58,7 +60,8 @@ def metrics(ranked: List[dict]) -> dict:
 def weighted_total(weights: Dict[str, float]) -> Callable[[dict], float]:
     """Ranking function for trying a different weight mix without touching WEIGHTS."""
     norm = sum(weights.values()) or 1.0
-    return lambda s: sum(weights.get(k, 0.0) * float(s.get(k) or 0.0) for k in WEIGHTS) / norm
+    return lambda s: (sum(weights.get(k, 0.0) * float(s.get(k) or 0.0) for k in WEIGHTS) / norm
+                      * location_factor(s.get("location_score")))
 
 
 __all__ = ["GOOD", "PARTIAL", "BAD", "precision_at_k", "ndcg_at_k", "rank", "metrics",

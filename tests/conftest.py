@@ -28,6 +28,13 @@ def _clear_settings_cache() -> None:
         clear()
 
 
+@pytest.fixture(autouse=True)
+def no_home_country(monkeypatch):
+    """Scores must not depend on the CANDIDATE_COUNTRY in a developer's own .env."""
+    monkeypatch.setenv("CANDIDATE_COUNTRY", "")
+    monkeypatch.setenv("CANDIDATE_CITIES", "")
+
+
 @pytest.fixture
 def db_engine():
     from sqlalchemy import create_engine
