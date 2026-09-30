@@ -348,3 +348,67 @@ def test_init_db_script(tmp_path):
     url = f"sqlite:///{(tmp_path / 'script.db').as_posix()}"
     assert mod.main([url]) == 0
     assert "jobs" in inspect(get_engine(url)).get_table_names()
+
+
+# ----------------------------------------------------------------- hand-added skills
+
+def test_extra_skills_are_cleaned_merged_and_survive_a_reparse(db_session):
+    rid = repo.save_resume(PARSED, "r.tex", session=db_session)
+    base = list(PARSED["skills"])
+    saved = repo.set_extra_skills(rid, ["  Kafka ", "kafka", "", "x" * 80, base[0], "Go\x00lang"],
+                                  session=db_session)
+    assert saved == ["Kafka", "x" * 40, base[0], "Golang"]
+    got = repo.get_resume(rid, session=db_session)
+    assert got["extra_skills"] == saved
+    assert got["skills"] == base + ["Kafka", "x" * 40, "Golang"]  # no duplicate of a parsed skill
+    # Uploading the same resume again refreshes the parse but keeps what the user typed.
+    assert repo.save_resume({**PARSED, "skills": ["Rust"]}, "r.tex", session=db_session) == rid
+    assert repo.get_resume(rid, session=db_session)["skills"][:2] == ["Rust", "Kafka"]
+    assert repo.set_extra_skills(rid, [], session=db_session) == []
+    with pytest.raises(ValueError):
+        repo.set_extra_skills(9999, ["a"], session=db_session)
+
+
+def test_list_resumes_newest_first(db_session):
+    a = repo.save_resume(PARSED, "a.tex", session=db_session)
+    b = repo.save_resume({**PARSED, "raw_text": "Different text"}, "b.tex", session=db_session)
+    rows = repo.list_resumes(session=db_session)
+    assert [r["id"] for r in rows] == [b, a]
+    assert rows[0]["file_path"] == "b.tex" and rows[0]["skill_count"] == len(PARSED["skills"])
+    assert "raw_text" not in rows[0]
+
+
+def test_init_db_adds_new_columns_to_an_old_database(tmp_path):
+    from sqlalchemy import create_engine, inspect, text
+
+    from db.database import init_db
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'old.db').as_posix()}")
+    with engine.begin() as conn:  # a resumes table from before extra_skills_json existed
+        conn.execute(text("CREATE TABLE resumes (id INTEGER PRIMARY KEY, file_path TEXT, raw_text TEXT, "
+                          "skills_json TEXT, experience_json TEXT, education TEXT, summary TEXT, "
+                          "created_at DATETIME NOT NULL)"))
+        conn.execute(text("INSERT INTO resumes (id, raw_text, created_at) VALUES (1, 'old', '2026-01-01')"))
+    init_db(engine)
+    init_db(engine)  # idempotent
+    assert "extra_skills_json" in {c["name"] for c in inspect(engine).get_columns("resumes")}
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT raw_text, extra_skills_json FROM resumes")).one() == ("old", None)
+    engine.dispose()
+
+
+def test_updated_resume_inherits_hand_added_skills(db_session):
+    old = repo.save_resume(PARSED, "v1.tex", session=db_session)
+    repo.set_extra_skills(old, ["Kafka", "Figma"], session=db_session)
+    new = repo.save_resume({**PARSED, "raw_text": "A newer version of the resume"}, "v2.tex",
+                           inherit_skills_from=old, session=db_session)
+    assert new != old
+    assert repo.get_resume(new, session=db_session)["extra_skills"] == ["Kafka", "Figma"]
+    # Without it, or with an unknown id, a new resume starts with none.
+    plain = repo.save_resume({**PARSED, "raw_text": "Third"}, "v3.tex", inherit_skills_from=9999, session=db_session)
+    assert repo.get_resume(plain, session=db_session)["extra_skills"] == []
+    # Re-saving existing text never overwrites that resume's own added skills.
+    repo.set_extra_skills(new, ["Go"], session=db_session)
+    assert repo.save_resume({**PARSED, "raw_text": "A newer version of the resume"}, "v2.tex",
+                            inherit_skills_from=old, session=db_session) == new
+    assert repo.get_resume(new, session=db_session)["extra_skills"] == ["Go"]

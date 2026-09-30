@@ -36,7 +36,9 @@ def resume_text(resume: dict) -> str:
     resume = resume or {}
     raw = resume.get("raw_text")
     if isinstance(raw, str) and raw.strip():
-        return raw
+        extra = [str(s) for s in resume.get("extra_skills") or [] if str(s).strip()]
+        # Skills the candidate typed in are part of the resume for every score.
+        return f"{raw}\nAdditional skills: {', '.join(extra)}" if extra else raw
     parts: List[str] = []
     for key in ("summary", "education"):
         v = resume.get(key)
@@ -381,7 +383,7 @@ def _score_batch(resume: dict, jobs: List[dict], country: Optional[str] = None,
     raws = batch_raw_cosines(rtext, jtexts)  # single TF-IDF fit across the batch
     sems = semantic_scores(rtext, jtexts)
     cand = estimate_candidate_years((resume or {}).get("experience"))
-    have = set(find_skills(rtext))
+    have = set(find_skills(rtext)) | {str(s).strip() for s in (resume or {}).get("extra_skills") or []}
     out = []
     for job, jtext, raw, sem in zip(jobs, jtexts, raws, sems):
         req = required_years_for(job)

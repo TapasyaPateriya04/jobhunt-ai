@@ -30,8 +30,11 @@ code MUST degrade gracefully when they are missing (tests run without them).
 - `db/database.py`: SQLAlchemy 2.0 models `Resume, Job, Match, Document` exactly per the ERD in SPEC §6
   (Job also has `location`, `posted_date`, `experience_years` nullable int, and a UNIQUE `url` / dedupe hash;
   Match has `experience_score`, `freshness_score`, `status` default "new", `calculated_at`).
-  `get_engine(url=None)`, `init_db(engine=None)`, `get_session()` context manager.
-- `db/repository.py`: `save_resume(parsed: dict, file_path: str) -> int` (same resume text reuses its row), `get_resume(id) -> dict|None`,
+  `get_engine(url=None)`, `init_db(engine=None)` (also adds nullable columns introduced later, e.g.
+  `resumes.extra_skills_json`, to an existing database), `get_session()` context manager.
+- `db/repository.py`: `save_resume(parsed: dict, file_path: str) -> int` (same resume text reuses its row),
+  `list_resumes(limit=50)`, `set_extra_skills(resume_id, skills) -> list[str]` (skills typed in by the user; resume dicts
+  carry them as `extra_skills` and merged into `skills`), `get_resume(id) -> dict|None`,
   `latest_resume() -> dict|None`, `upsert_jobs(jobs: list[dict]) -> int` (returns new count; dedupe on url or
   title+company+location hash), `list_jobs(limit=50) -> list[dict]`, `get_job(id) -> dict|None`,
   `save_match(resume_id, job_id, scores: dict) -> int`, `list_matches(resume_id, limit=50) -> list[dict]`
@@ -80,9 +83,12 @@ code MUST degrade gracefully when they are missing (tests run without them).
   (1.0 .. 0.4). `score_jobs` / `calculate_confidence_score` take optional `country`, `cities` (default: settings
   `candidate_country`, `candidate_cities`; `""` disables) and add `base_total`, `location_status`, `location_score`,
   `location_reason` to the scores.
+- `matching/skill_gap.py`: `candidate_skills(resume) -> set`, `skill_gap(job, have) -> {"required", "matched",
+  "missing", "nice_missing"}`, `is_near_miss(gap)`, `near_misses(jobs, have, min_missing=1, max_missing=3)`,
+  `skills_to_learn(near) -> [{"skill", "jobs", "closes"}]`.
 - `matching/evaluation.py`: `precision_at_k`, `ndcg_at_k`, `rank`, `metrics` for `scripts/evaluate_matching.py`
   (labels in `eval/labeled_jobs.json`: 2 good, 1 partial, 0 bad).
 
 ## ui/ (owner: frontend)
-- `ui/app.py` Streamlit with the four tabs from SPEC §7 (Resume, Scrape Jobs, Matches, Generate Docs), wired to the
+- `ui/app.py` Streamlit with the four tabs from SPEC §7 (named Resume, Find jobs, Matches, Documents), wired to the
   functions above; persists to SQLite via db.repository; never shows raw exceptions/secrets.

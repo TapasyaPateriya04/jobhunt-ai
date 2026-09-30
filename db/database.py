@@ -23,6 +23,8 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     event,
+    inspect,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
@@ -45,6 +47,7 @@ class Resume(Base):
     file_path: Mapped[Optional[str]] = mapped_column(Text)
     raw_text: Mapped[Optional[str]] = mapped_column(Text)
     skills_json: Mapped[Optional[str]] = mapped_column(Text)  # JSON list[str]
+    extra_skills_json: Mapped[Optional[str]] = mapped_column(Text)  # JSON list[str], typed in by the user
     experience_json: Mapped[Optional[str]] = mapped_column(Text)  # JSON list[dict]
     education: Mapped[Optional[str]] = mapped_column(Text)
     summary: Mapped[Optional[str]] = mapped_column(Text)
@@ -174,7 +177,22 @@ def init_db(engine: Optional[Engine] = None) -> Engine:
     """Create all tables (idempotent). Returns the engine used."""
     engine = engine or get_engine()
     Base.metadata.create_all(engine)
+    _add_missing_columns(engine)
     return engine
+
+
+# Nullable columns added after the first release: (table, column, SQL type). ``create_all``
+# never alters an existing table, so databases made earlier get them here.
+_ADDED_COLUMNS = (("resumes", "extra_skills_json", "TEXT"),)
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    inspector = inspect(engine)
+    for table, column, sql_type in _ADDED_COLUMNS:
+        if column in {c["name"] for c in inspector.get_columns(table)}:
+            continue
+        with engine.begin() as conn:  # names come from the constant above, never from input
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}"))
 
 
 def _sessionmaker_for(engine: Engine) -> sessionmaker:

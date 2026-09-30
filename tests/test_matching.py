@@ -278,3 +278,42 @@ def test_score_jobs_sorted_desc_batch():
     totals = [j["scores"]["total"] for j in ranked]
     assert totals == sorted(totals, reverse=True) and len(ranked) == 4
     assert ranked[0]["title"] == "Python Developer"
+
+
+# ------------------------------------------------------------------ skill gap / suggestions
+def test_skill_gap_near_misses_and_skills_to_learn():
+    from matching.skill_gap import candidate_skills, is_near_miss, near_misses, skill_gap, skills_to_learn
+
+    resume = {"raw_text": "Java, Spring Boot, React, MySQL, Git.", "extra_skills": ["docker", "Figma"]}
+    have = candidate_skills(resume)
+    assert {"Java", "Spring Boot", "React", "MySQL", "Git", "Docker", "Figma"} <= have
+
+    jobs = [
+        {"id": "two_short", "description": "Requirements: Java, Spring Boot, React, Kafka and AWS."},
+        {"id": "one_short", "description": "We use Java, Spring Boot, MySQL and Kafka. Kubernetes is a plus."},
+        {"id": "full", "description": "Java, Spring Boot, React, Docker."},
+        {"id": "far", "description": "Python, Django, AWS, Kubernetes, Terraform, Kafka, Go."},
+        {"id": "mostly_missing", "description": "Java, Rust, Go, Scala."},      # has 1, lacks 3
+        {"id": "too_vague", "description": "Java and Kafka."},                   # too few skills to judge
+    ]
+    gap = skill_gap(jobs[1], have)
+    assert gap["missing"] == ["Kafka"] and gap["nice_missing"] == ["Kubernetes"]
+    assert gap["matched"] == ["Java", "Spring Boot", "MySQL"]
+    assert is_near_miss(gap) and not is_near_miss(skill_gap(jobs[2], have))
+
+    near = near_misses(jobs, have)
+    assert [j["id"] for j in near] == ["one_short", "two_short"]  # fewest missing first
+    assert near_misses(jobs, have, min_missing=2, max_missing=3)[0]["id"] == "two_short"
+    todo = skills_to_learn(near)
+    assert todo[0] == {"skill": "Kafka", "jobs": 2, "closes": 1}
+    assert todo[1] == {"skill": "AWS", "jobs": 1, "closes": 0}
+    assert skills_to_learn([]) == [] and near_misses([], have) == []
+
+
+def test_hand_added_skills_raise_the_score():
+    job = {"title": "Backend Developer", "description": "Java, Spring Boot, Kafka, AWS, Kubernetes."}
+    resume = {"raw_text": "Java and Spring Boot developer."}
+    before = calculate_confidence_score(resume, job)
+    after = calculate_confidence_score({**resume, "extra_skills": ["Kafka", "AWS"]}, job)
+    assert before["skill_coverage"] == 40.0 and after["skill_coverage"] == 80.0
+    assert after["ats"] > before["ats"] and after["total"] > before["total"]

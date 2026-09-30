@@ -90,6 +90,22 @@ For Greenhouse and Lever the slug is the last part of the company's careers URL:
 Jobs are kept only when they are relevant to your keywords: a keyword must be in the job
 title or mentioned at least twice in the description (see `scraper/relevance.py`).
 
+## Using the app
+
+- **Resume tab**: upload a resume, or update it by uploading a newer file (skills you added by hand carry over). Pick between stored resumes in the **Resume in use** dropdown. Type skills
+  your file doesn't mention into **Add a skill** (several at once, separated by commas); they are
+  saved with the resume and count in matching.
+- **Matches tab**: sliders set the minimum confidence and the most years a posting may ask for;
+  checkboxes hide jobs you cannot take; dropdowns choose your country, a source, a status and how
+  to sort. Each job is a card with its match score, the years it asks for, whether you can take
+  it, and the skills you have and lack. **Save** and **Hide** work from the card; hidden jobs
+  come back under Status: hidden. The card's expander holds the scores, must-have and
+  nice-to-have skills and the full posting, and its **Status** dropdown is your application tracker.
+- **Skills worth adding** (Matches tab): jobs that are only 1 to 3 must-have skills short of a
+  full match, with the skills that come up most. If you already have one, add it from the
+  dropdown. Buzzwords such as "AI" and "SaaS" are not counted as missing skills.
+- After scraping, adding skills or changing your country, click **Score stored jobs**.
+
 ## Matching quality
 
 The score is `0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness`:
