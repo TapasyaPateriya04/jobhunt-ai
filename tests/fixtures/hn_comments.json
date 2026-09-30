@@ -1,0 +1,8 @@
+{"hits": [
+  {"objectID": "45000101", "parent_id": 45000000, "story_id": 45000000, "author": "acme_hr", "created_at_i": 1788400000,
+   "comment_text": "Acme Robotics | Senior Python Engineer | Berlin or REMOTE (EU) | Full-time | https://acme.example/jobs<p>We use Python, FastAPI and PostgreSQL. 4+ years of backend experience.</p>"},
+  {"objectID": "45000102", "parent_id": 45000101, "story_id": 45000000, "author": "someone", "created_at_i": 1788400500,
+   "comment_text": "Is this role open to contractors?"},
+  {"objectID": "45000103", "parent_id": 45000000, "story_id": 45000000, "author": "globex", "created_at_i": 1788500000,
+   "comment_text": "Globex | ONSITE | San Francisco | Machine Learning Engineer | $180k-$220k<p>PyTorch, Python, Kubernetes.</p>"}
+]}
