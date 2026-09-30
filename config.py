@@ -59,6 +59,12 @@ class Settings:
     max_jobs_per_session: int = 50
     upload_max_bytes: int = 2_000_000
     allow_remote_llm: bool = False
+    greenhouse_boards: tuple[str, ...] = ()
+    lever_companies: tuple[str, ...] = ()
+
+
+def _env_list(name: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(p.strip() for p in (os.getenv(name) or "").split(",") if p.strip()))
 
 
 def get_settings(env_file: Optional[str | os.PathLike[str]] = None) -> Settings:
@@ -77,4 +83,6 @@ def get_settings(env_file: Optional[str | os.PathLike[str]] = None) -> Settings:
         max_jobs_per_session=_env_int("MAX_JOBS_PER_SESSION", 50),
         upload_max_bytes=_env_int("UPLOAD_MAX_BYTES", 2_000_000),
         allow_remote_llm=_env_bool("ALLOW_REMOTE_LLM", False),
+        greenhouse_boards=_env_list("GREENHOUSE_BOARDS"),
+        lever_companies=_env_list("LEVER_COMPANIES"),
     )

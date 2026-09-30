@@ -7,9 +7,10 @@ Normalized job dict (docs/CONTRACTS.md):
 from __future__ import annotations
 
 import re
+import warnings
 from datetime import datetime, timedelta, timezone
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 
 from security.sanitize import sanitize_text
 
@@ -63,7 +64,9 @@ def html_to_text(html: str) -> str:
         return ""
     if "<" not in html and "&" not in html:
         return html
-    soup = BeautifulSoup(html, "html.parser")
+    with warnings.catch_warnings():  # short plain strings ("R&D") look like filenames to bs4
+        warnings.simplefilter("ignore", MarkupResemblesLocatorWarning)
+        soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     for br in soup.find_all("br"):

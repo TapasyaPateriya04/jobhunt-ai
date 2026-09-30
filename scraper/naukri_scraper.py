@@ -1,4 +1,9 @@
-"""Naukri.com search results via Playwright + BeautifulSoup (scrape slowly; robots checked first)."""
+"""Naukri.com search results via Playwright + BeautifulSoup (scrape slowly; robots checked first).
+
+Experimental: as of 2026-09 Naukri answers automated browsers with an "Access Denied" page,
+so this returns [] in practice and the selectors are untested against a live results page.
+Never try to get around the block.
+"""
 from __future__ import annotations
 
 import re

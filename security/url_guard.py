@@ -13,6 +13,10 @@ ALLOWED_JOB_HOSTS: frozenset[str] = frozenset({
     "remoteok.io",
     "hn.algolia.com",
     "news.ycombinator.com",
+    "remotive.com",
+    "arbeitnow.com",
+    "boards-api.greenhouse.io",
+    "api.lever.co",
 })
 LOCAL_LLM_HOSTS: frozenset[str] = frozenset({"localhost", "127.0.0.1", "::1"})
 

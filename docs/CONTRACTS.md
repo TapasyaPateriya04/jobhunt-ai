@@ -11,7 +11,8 @@ code MUST degrade gracefully when they are missing (tests run without them).
   `ollama_base_url` (default `http://localhost:11434`), `ollama_model` (default `mistral`),
   `gemini_api_key` (Optional[str]), `gemini_model` (default `gemini-3.8-flash`),
   `docs_dir` (default `~/jobhunt_docs`), `scrape_delay_seconds` (default 3.0),
-  `max_jobs_per_session` (default 50), `upload_max_bytes` (default 2_000_000).
+  `max_jobs_per_session` (default 50), `upload_max_bytes` (default 2_000_000),
+  `greenhouse_boards` / `lever_companies` (tuples of company slugs from comma-separated env, default empty).
 
 ## security/ (owner: security)
 - `security/sanitize.py`: `sanitize_text(s: str, max_len: int = 20000) -> str` (strip control chars, limit length),
@@ -44,9 +45,16 @@ code MUST degrade gracefully when they are missing (tests run without them).
 - `scraper/normalizer.py`: `normalize_job(raw: dict, source: str) -> dict`, `extract_experience_years(text) -> int|None`.
 - `scraper/remoteok_scraper.py`: `fetch_remoteok(keywords, max_jobs=20) -> list[dict]` (free public JSON API; default source).
 - `scraper/hn_scraper.py`: `fetch_hn_whos_hiring(keywords, max_jobs=20) -> list[dict]` (HN Algolia API).
-- `scraper/indeed_scraper.py`, `linkedin_scraper.py`, `naukri_scraper.py`: async Playwright+BS4 scrapers per SPEC §5.2,
+- `scraper/relevance.py`: `relevance(keywords, title, tags="", description="") -> int` (0 = off-topic) and
+  `select_relevant(items, keywords, max_jobs, fields)`; every API source filters through it.
+- `scraper/remotive_scraper.py`: `fetch_remotive(keywords, max_jobs=20)`; `scraper/arbeitnow_scraper.py`:
+  `fetch_arbeitnow(keywords, max_jobs=20)` (free public JSON APIs; default sources).
+- `scraper/ats_boards.py`: `fetch_greenhouse(keywords, max_jobs=20, boards=None)`, `fetch_lever(keywords, max_jobs=20,
+  companies=None)` (public job-board APIs for the company slugs in settings; [] when none configured).
+- `scraper/indeed_scraper.py`, `linkedin_scraper.py`, `naukri_scraper.py`: EXPERIMENTAL async Playwright+BS4 scrapers per SPEC §5.2,
   each checks robots via `security.robots.can_fetch` and uses RateLimiter; fail gracefully (return []) when playwright missing.
-- `scraper/__init__.py` or `scraper/service.py`: `scrape_jobs(keywords, location, max_jobs, sources: list[str]) -> list[dict]`.
+- `scraper/__init__.py` or `scraper/service.py`: `scrape_jobs(keywords, location, max_jobs, sources: list[str]) -> list[dict]`;
+  `DEFAULT_SOURCES` (remoteok, hn, remotive, arbeitnow), `EXPERIMENTAL_SOURCES` (indeed, linkedin, naukri), `ALL_SOURCES`.
 - `parser/resume_parser.py`: `parse_resume_text(text) -> dict`, `parse_latex_resume(path) -> dict`,
   `parse_resume_bytes(filename, data) -> dict` (.tex/.txt/.md; .pdf optional) returning
   `{"raw_text","skills": list[str],"experience": list[dict],"education": str,"summary": str}`.

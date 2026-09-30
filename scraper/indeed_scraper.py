@@ -1,12 +1,12 @@
 """Indeed search results via Playwright + BeautifulSoup (SPEC §5.2, corrected Python).
 
-Note: scraping Indeed may violate its ToS and robots.txt usually disallows /jobs for
-generic bots; ``fetch_rendered_html`` checks robots.txt first and we return [] when
-disallowed. Prefer the RemoteOK / HN sources.
+Experimental: scraping Indeed may violate its ToS and the site sits behind bot protection.
+``fetch_rendered_html`` checks robots.txt first and we return [] when disallowed or
+blocked; never try to get around a block. Prefer the API sources.
 """
 from __future__ import annotations
 
-from urllib.parse import urlencode, urljoin
+from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -23,8 +23,21 @@ def build_url(keywords: str, location: str) -> str:
 def parse_indeed_html(html: str, max_jobs: int = 20) -> list[dict]:
     soup = BeautifulSoup(html or "", "html.parser")
     jobs: list[dict] = []
-    for card in soup.select(".job_seen_beacon, .jobsearch-ResultsList .result")[:max_jobs]:
+    seen: set[str] = set()
+    # The two selectors can match the same job twice (a beacon nested in a result), and
+    # each job has several tracking URLs, so dedupe on the job key (``jk``).
+    for card in soup.select(".job_seen_beacon, .jobsearch-ResultsList .result"):
+        if len(jobs) >= max_jobs:
+            break
         href = select_attr(card, "href", "a.jcs-JobTitle", "h2.jobTitle a", ".jobTitle a")
+        jk = select_attr(card, "data-jk", "a[data-jk]") or "".join(
+            parse_qs(urlsplit(href).query).get("jk", [])[:1])
+        if jk:
+            href = f"/viewjob?{urlencode({'jk': jk})}"
+        key = jk or href or select_text(card, ".jobTitle", "h2 a")
+        if key in seen:
+            continue
+        seen.add(key)
         raw = {
             "title": select_text(card, "h2.jobTitle span[title]", ".jobTitle", "h2 a"),
             "company": select_text(card, "[data-testid=company-name]", ".companyName"),

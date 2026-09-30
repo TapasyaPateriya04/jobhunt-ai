@@ -23,18 +23,25 @@ MATCH_STATUSES = ["new", "saved", "applied", "rejected"]
 SOURCES = {
     "remoteok": "RemoteOK (free public API)",
     "hn": "Hacker News 'Who's Hiring' (Algolia API)",
-    "indeed": "Indeed (needs Playwright, check ToS)",
-    "linkedin": "LinkedIn (needs Playwright, check ToS)",
-    "naukri": "Naukri (needs Playwright, check ToS)",
+    "remotive": "Remotive (free public API)",
+    "arbeitnow": "Arbeitnow (free public API, mostly Europe)",
+    "greenhouse": "Greenhouse company boards (set GREENHOUSE_BOARDS in .env)",
+    "lever": "Lever company boards (set LEVER_COMPANIES in .env)",
+    "indeed": "Indeed (experimental: needs Playwright, check ToS)",
+    "linkedin": "LinkedIn (experimental: blocked by robots.txt)",
+    "naukri": "Naukri (experimental: blocks automated browsers)",
 }
-DEFAULT_SOURCES = ["remoteok", "hn"]
+DEFAULT_SOURCES = ["remoteok", "hn", "remotive", "arbeitnow"]
+EXPERIMENTAL_SOURCES = ["indeed", "linkedin", "naukri"]
 
 ETHICAL_NOTE = (
-    "**Scrape responsibly.** Prefer official/free APIs (RemoteOK, HN Who's Hiring). "
-    "For HTML portals the scraper checks `robots.txt` and skips disallowed sites, waits "
-    "3-5 s between requests, caps each session at 20-50 jobs, and caches results so the "
-    "same job is never re-scraped. Read each site's Terms of Service before enabling "
-    "Indeed, LinkedIn or Naukri - they are for personal learning only."
+    "**Scrape responsibly.** Prefer official/free APIs (RemoteOK, HN Who's Hiring, Remotive, "
+    "Arbeitnow, Greenhouse and Lever company boards). For HTML portals the scraper checks "
+    "`robots.txt` and skips disallowed sites, waits 3-5 s between requests, caps each "
+    "session at 20-50 jobs, and caches results so the same job is never re-scraped. "
+    "Indeed, LinkedIn and Naukri are **experimental**: they restrict automated access, "
+    "usually return nothing, and are for personal learning only. Read each site's Terms "
+    "of Service before enabling them."
 )
 
 LLM_HELP = (

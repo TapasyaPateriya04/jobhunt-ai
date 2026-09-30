@@ -2,7 +2,7 @@
 """End-to-end JobHunt AI workflow from the command line.
 
     python pipeline.py --resume resume.tex --keywords "Python Developer" \
-        --location Remote --max-jobs 20 --sources remoteok,hn
+        --location Remote --max-jobs 20 --sources remoteok,hn,remotive,arbeitnow
 
 Steps: parse resume -> scrape jobs -> store jobs -> score matches -> save matches -> print table.
 """
@@ -26,10 +26,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="JobHunt AI: parse your resume, scrape jobs and rank matches.")
     p.add_argument("--resume", required=True, help="Path to resume (.tex, .txt, .md; .pdf if pypdf is installed)")
     p.add_argument("--keywords", default="Python Developer", help='Search keywords, e.g. "Python Developer"')
-    p.add_argument("--location", default="Remote", help="Location (used by Indeed/LinkedIn/Naukri)")
+    p.add_argument("--location", default="Remote", help="Location (only used by the experimental Indeed/LinkedIn/Naukri scrapers)")
     p.add_argument("--max-jobs", type=int, default=20, help="Max jobs to scrape (capped by MAX_JOBS_PER_SESSION)")
-    p.add_argument("--sources", default="remoteok,hn",
-                   help="Comma-separated sources: remoteok,hn,indeed,linkedin,naukri")
+    p.add_argument("--sources", default="remoteok,hn,remotive,arbeitnow",
+                   help="Comma-separated sources: remoteok,hn,remotive,arbeitnow,greenhouse,lever "
+                        "(greenhouse/lever need GREENHOUSE_BOARDS/LEVER_COMPANIES in .env); "
+                        "experimental, usually blocked: indeed,linkedin,naukri")
     p.add_argument("--top", type=int, default=20, help="Rows to show in the results table")
     p.add_argument("--db", default=None, help="Database URL override (default: DATABASE_URL or sqlite:///jobhunt.db)")
     p.add_argument("--no-save", action="store_true", help="Score only; don't write resume/jobs/matches to the DB")

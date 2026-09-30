@@ -202,8 +202,29 @@ def test_parse_indeed_html():
     assert len(jobs) == 1
     j = jobs[0]
     assert (j["title"], j["company"], j["location"], j["source"]) == ("Python Developer", "Acme", "Remote", "indeed")
-    assert j["url"] == "https://www.indeed.com/rc/clk?jk=abc"
+    assert j["url"] == "https://www.indeed.com/viewjob?jk=abc"  # canonical, no tracking params
     assert j["experience_years"] == 3
+
+
+def test_parse_indeed_html_dedupes_nested_cards_and_tracking_urls():
+    card = ('<div class="job_seen_beacon"><h2 class="jobTitle"><a class="jcs-JobTitle" href="{}">'
+            '<span title="Python Developer">Python Developer</span></a></h2></div>')
+    html = ('<ul class="jobsearch-ResultsList"><li class="result">'
+            + card.format("/rc/clk?jk=abc&amp;bb=track1") + "</li></ul>"
+            + card.format("/pagead/clk?jk=abc&amp;xkcb=track2") + card.format("/rc/clk?jk=def"))
+    assert [j["url"] for j in parse_indeed_html(html)] == [
+        "https://www.indeed.com/viewjob?jk=abc", "https://www.indeed.com/viewjob?jk=def"]
+    assert len(parse_indeed_html(html, max_jobs=1)) == 1
+
+
+def test_parse_hn_comment_header_with_links_and_no_role():
+    job = hn_scraper.parse_hn_comment({"objectID": "1", "created_at_i": 1790000000, "comment_text": (
+        'GovStar | <a href="https:&#x2F;&#x2F;govstar.example">https:&#x2F;&#x2F;govstar.example</a> | '
+        "Staff Platform Engineer | Remote (US)<p>We use Python and Go.")})
+    assert (job["company"], job["title"], job["location"]) == ("GovStar", "Staff Platform Engineer", "Remote (US)")
+    job = hn_scraper.parse_hn_comment({"objectID": "2", "comment_text": (
+        "Solution Street | Northern Virginia - HYBRID &amp; ONSITE<p>We are a consulting company.")})
+    assert job["company"] == "Solution Street" and job["title"] == "Software role"
 
 
 def test_parse_linkedin_html():
@@ -276,6 +297,8 @@ def test_scrape_jobs_default_sources_end_to_end(monkeypatch):
     def fake_get(url, params=None, headers=None, timeout=None):
         if "remoteok" in url:
             return FakeResp(_remoteok_payload())
+        if "remotive" in url or "arbeitnow" in url:
+            return FakeResp({"jobs": [], "data": []})
         return FakeResp(story if "search_by_date" in url else comments)
 
     monkeypatch.setattr(requests, "get", fake_get)
