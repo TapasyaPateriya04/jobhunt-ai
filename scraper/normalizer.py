@@ -7,9 +7,10 @@ Normalized job dict (docs/CONTRACTS.md):
 from __future__ import annotations
 
 import re
+import warnings
 from datetime import datetime, timedelta, timezone
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 
 from security.sanitize import sanitize_text
 
@@ -50,7 +51,7 @@ def extract_experience_years(text) -> int | None:
         strong = bool(m.group("plus") or m.group("pre") or m.group("high"))
         contextual = bool(re.search(r"\b(experience|exp\b|professional|industry|working|hands[- ]on|"
                                     r"in\s+(a|an|the)?\s*\w+|of\s+\w+|with\s+\w+|building|developing)", post))
-        if re.match(r"\s*(old|ago|warranty|guarantee|history|in\s+business)", post):
+        if re.match(r"\s*(old|ago|warranty|guarantee|history|in\s+business|stable|running|strong|of\s+(growth|success|history|operation)|track\s+record)", post):
             continue
         if strong or contextual:
             found.append(low)
@@ -63,7 +64,9 @@ def html_to_text(html: str) -> str:
         return ""
     if "<" not in html and "&" not in html:
         return html
-    soup = BeautifulSoup(html, "html.parser")
+    with warnings.catch_warnings():  # short plain strings ("R&D") look like filenames to bs4
+        warnings.simplefilter("ignore", MarkupResemblesLocatorWarning)
+        soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     for br in soup.find_all("br"):

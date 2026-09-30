@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -84,6 +85,11 @@ def test_extract_experience_years(text, years):
     assert extract_experience_years(text) == years
 
 
+def test_extract_experience_years_ignores_company_age():
+    text = "Profitable, 18+ yrs stable, employee-owned. You: 5+ yr senior dev who has seen it all."
+    assert extract_experience_years(text) == 5
+
+
 def test_parse_posted_date_variants():
     now = datetime.utcnow()
     assert abs(parse_posted_date("3 days ago") - (now - timedelta(days=3))) < timedelta(minutes=1)
@@ -99,7 +105,7 @@ def test_html_to_text():
 
 # ---------------------------------------------------------------- RemoteOK
 def _remoteok_payload():
-    return json.loads((FIX / "remoteok_sample.json").read_text())
+    return json.loads((FIX / "remoteok_sample.json").read_text(encoding="utf-8"))
 
 
 def test_parse_remoteok_skips_legal_and_filters():
@@ -145,8 +151,8 @@ def test_fetch_remoteok_network_error(monkeypatch):
 
 # ---------------------------------------------------------------- HN
 def test_fetch_hn_whos_hiring(monkeypatch):
-    story = json.loads((FIX / "hn_story.json").read_text())
-    comments = json.loads((FIX / "hn_comments.json").read_text())
+    story = json.loads((FIX / "hn_story.json").read_text(encoding="utf-8"))
+    comments = json.loads((FIX / "hn_comments.json").read_text(encoding="utf-8"))
     seen = []
 
     def fake_get(url, params=None, headers=None, timeout=None):
@@ -201,8 +207,32 @@ def test_parse_indeed_html():
     assert len(jobs) == 1
     j = jobs[0]
     assert (j["title"], j["company"], j["location"], j["source"]) == ("Python Developer", "Acme", "Remote", "indeed")
-    assert j["url"] == "https://www.indeed.com/rc/clk?jk=abc"
+    assert j["url"] == "https://www.indeed.com/viewjob?jk=abc"  # canonical, no tracking params
     assert j["experience_years"] == 3
+
+
+def test_parse_indeed_html_dedupes_nested_cards_and_tracking_urls():
+    card = ('<div class="job_seen_beacon"><h2 class="jobTitle"><a class="jcs-JobTitle" href="{}">'
+            '<span title="Python Developer">Python Developer</span></a></h2></div>')
+    html = ('<ul class="jobsearch-ResultsList"><li class="result">'
+            + card.format("/rc/clk?jk=abc&amp;bb=track1") + "</li></ul>"
+            + card.format("/pagead/clk?jk=abc&amp;xkcb=track2") + card.format("/rc/clk?jk=def"))
+    assert [j["url"] for j in parse_indeed_html(html)] == [
+        "https://www.indeed.com/viewjob?jk=abc", "https://www.indeed.com/viewjob?jk=def"]
+    assert len(parse_indeed_html(html, max_jobs=1)) == 1
+
+
+def test_parse_hn_comment_header_with_links_and_no_role():
+    job = hn_scraper.parse_hn_comment({"objectID": "1", "created_at_i": 1790000000, "comment_text": (
+        'GovStar | <a href="https:&#x2F;&#x2F;govstar.example">https:&#x2F;&#x2F;govstar.example</a> | '
+        "Staff Platform Engineer | Remote (US)<p>We use Python and Go.")})
+    assert (job["company"], job["title"], job["location"]) == ("GovStar", "Staff Platform Engineer", "Remote (US)")
+    job = hn_scraper.parse_hn_comment({"objectID": "2", "comment_text": (
+        "Solution Street | Northern Virginia - HYBRID &amp; ONSITE<p>We are a consulting company.")})
+    assert job["company"] == "Solution Street" and job["title"] == "Software role"
+    # A candidate's "who wants to be hired" style post is not a job.
+    assert hn_scraper.parse_hn_comment({"objectID": "3", "comment_text": (
+        "Location: London, UK<p>Remote: Yes<p>Willing to relocate: No<p>Technologies: Python")}) is None
 
 
 def test_parse_linkedin_html():
@@ -225,8 +255,11 @@ def test_build_urls_are_encoded():
     assert naukri_url("Python", "Remote") == "https://www.naukri.com/python-jobs"
 
 
-def test_playwright_scraper_without_playwright_returns_empty():
-    # playwright isn't installed in the test environment
+def test_playwright_scraper_without_playwright_returns_empty(monkeypatch):
+    # Simulate Playwright being absent (it may be installed locally) and skip the live robots check.
+    monkeypatch.setitem(sys.modules, "playwright", None)
+    monkeypatch.setitem(sys.modules, "playwright.async_api", None)
+    monkeypatch.setattr("scraper.net.check_allowed", lambda url: None)
     assert asyncio.run(scrape_indeed("python", "remote", 5)) == []
 
 
@@ -266,12 +299,14 @@ def test_scrape_jobs_respects_session_cap(monkeypatch):
 
 
 def test_scrape_jobs_default_sources_end_to_end(monkeypatch):
-    story = json.loads((FIX / "hn_story.json").read_text())
-    comments = json.loads((FIX / "hn_comments.json").read_text())
+    story = json.loads((FIX / "hn_story.json").read_text(encoding="utf-8"))
+    comments = json.loads((FIX / "hn_comments.json").read_text(encoding="utf-8"))
 
     def fake_get(url, params=None, headers=None, timeout=None):
         if "remoteok" in url:
             return FakeResp(_remoteok_payload())
+        if "themuse" in url or "arbeitnow" in url:
+            return FakeResp({"results": [], "data": []})
         return FakeResp(story if "search_by_date" in url else comments)
 
     monkeypatch.setattr(requests, "get", fake_get)

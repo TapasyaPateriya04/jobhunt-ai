@@ -1,4 +1,5 @@
 [server]
+address = "localhost"
 maxUploadSize = 2
 headless = true
 enableXsrfProtection = true
@@ -12,8 +13,8 @@ toolbarMode = "minimal"
 
 [theme]
 base = "light"
-primaryColor = "#4F46E5"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F5FB"
-textColor = "#1F2937"
+primaryColor = "#0F766E"
+backgroundColor = "#F8FAFC"
+secondaryBackgroundColor = "#F1F5F9"
+textColor = "#0F172A"
 font = "sans serif"

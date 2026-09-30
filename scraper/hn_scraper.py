@@ -21,6 +21,7 @@ _LOCATION_HINT = re.compile(r"\b(remote|onsite|on-site|hybrid|in[- ]office|reloc
 _ROLE_HINT = re.compile(
     r"\b(engineer|developer|scientist|designer|manager|analyst|architect|devops|sre|lead|"
     r"intern|founding|programmer|researcher|head of|director|full[- ]?stack|backend|frontend)\b", re.I)
+_SEEKER_HINT = re.compile(r"willing\s+to\s+relocate|r[eé]sum[eé]\s*/\s*cv\s*:", re.I)
 _URL_HINT = re.compile(r"https?://|www\.|\.(com|io|ai|dev|co)\b", re.I)
 
 
@@ -43,7 +44,12 @@ def parse_hn_comment(hit: dict) -> dict | None:
     if not html.strip():
         return None
     text = html_to_text(html)
-    first_line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+    if _SEEKER_HINT.search(text[:600]):
+        return None  # a "Who wants to be hired" style post from a candidate, not a job
+    # The header ("Company | Role | Location | ...") is the first paragraph. Links inside it
+    # become line breaks in ``text``, so rebuild it from the HTML instead of taking a line.
+    first_para = next((p for p in re.split(r"<p\b[^>]*>", html, flags=re.I) if p.strip()), "")
+    first_line = re.sub(r"\s+", " ", html_to_text(first_para)).strip()[:400]
     parts = [p.strip() for p in re.split(r"\s+\|\s+|\s+\|\s*|\s*\|\s+", first_line) if p.strip()]
     if len(parts) < 2:
         parts = [p.strip() for p in re.split(r"\s+[-–—]\s+", first_line) if p.strip()]

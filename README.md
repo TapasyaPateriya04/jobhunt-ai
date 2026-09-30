@@ -6,7 +6,7 @@ Everything runs on your laptop. The full plan lives in [docs/SPEC.md](docs/SPEC.
 
 | Layer | Tool |
 |-------|------|
-| Scraping | RemoteOK API, HN "Who's Hiring" (Algolia API), Playwright + BeautifulSoup4 (Indeed / LinkedIn / Naukri) |
+| Scraping | Free APIs: RemoteOK, HN "Who's Hiring" (Algolia), The Muse, Arbeitnow, Greenhouse and Lever company boards. Experimental: Playwright + BeautifulSoup4 (Indeed / LinkedIn / Naukri) |
 | Parsing | pylatexenc, regex, spaCy (optional) |
 | Matching | scikit-learn TF-IDF + SentenceTransformers `all-MiniLM-L6-v2` (TF-IDF fallback if not installed) |
 | LLM | Ollama (Mistral / Llama 3.2) locally, Gemini free tier as fallback |
@@ -16,10 +16,10 @@ Everything runs on your laptop. The full plan lives in [docs/SPEC.md](docs/SPEC.
 ## Workflow
 
 ```
-Resume (.tex/.txt/.md/.pdf) ─► parser ─► SQLite ◄─ scraper (RemoteOK, HN, Playwright sites)
+Resume (.tex/.txt/.md/.pdf) ─► parser ─► SQLite ◄─ scraper (RemoteOK, HN, The Muse, Arbeitnow, ...)
                                             │
                                             ▼
-                         matching: 0.35 ATS + 0.25 experience + 0.20 semantic + 0.20 freshness
+                         matching: 0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness
                                             │
                                             ▼
                      Streamlit dashboard ─► cover letter / resume suggestions (Ollama or Gemini)
@@ -33,7 +33,7 @@ pip install -r requirements.txt
 cp .env.example .env                               # edit if you use Gemini
 
 # Optional extras
-playwright install chromium                        # for Indeed/LinkedIn/Naukri scrapers
+playwright install chromium                        # only for the experimental Indeed/LinkedIn/Naukri scrapers
 python -m spacy download en_core_web_sm            # better skill hints
 ollama pull mistral                                # local LLM (https://ollama.ai)
 
@@ -41,10 +41,15 @@ python scripts/init_db.py                          # creates jobhunt.db
 streamlit run ui/app.py                            # open http://localhost:8501
 ```
 
+On Windows: if `spacy download` fails with a 404, install the model wheel directly with
+`pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl`.
+Ollama installs with `winget install Ollama.Ollama`. On a CPU-only laptop the first Mistral
+generation can take about two minutes.
+
 Or run the whole pipeline from the terminal:
 
 ```bash
-python pipeline.py --resume my_resume.tex --keywords "Python Developer" --location Remote --max-jobs 20 --sources remoteok,hn
+python pipeline.py --resume my_resume.tex --keywords "Python Developer" --location Remote --max-jobs 20 --sources remoteok,hn,themuse,arbeitnow
 ```
 
 ## Project layout
@@ -62,15 +67,90 @@ pipeline.py      end-to-end CLI
 tests/           pytest suite (no network, no heavy models needed)
 ```
 
+## Job sources
+
+| Source | `--sources` name | Notes |
+|--------|------------------|-------|
+| RemoteOK | `remoteok` | Free public API. On by default. |
+| HN "Who's Hiring" | `hn` | Latest monthly thread via the Algolia API. On by default. |
+| The Muse | `themuse` | Free public API, large companies worldwide including India. Uses the location you give. On by default. |
+| Arbeitnow | `arbeitnow` | Free public API, mostly Europe. On by default. |
+| Greenhouse boards | `greenhouse` | Companies you list in `GREENHOUSE_BOARDS` (e.g. `gitlab`). |
+| Lever boards | `lever` | Companies you list in `LEVER_COMPANIES` (e.g. `palantir`). |
+| Indeed, LinkedIn, Naukri | `indeed`, `linkedin`, `naukri` | **Experimental**, off by default. See below. |
+
+The Muse has no keyword search and needs locations spelled its own way, separated by `;`:
+`--location "Bangalore, India; Gurgaon, India; Hyderabad, India; Pune, India"`. "Remote" (the
+default) searches its "Flexible / Remote" jobs. Entry-level software roles in India are rare
+there; most listings are mid or senior level.
+
+For Greenhouse and Lever the slug is the last part of the company's careers URL:
+`boards.greenhouse.io/<slug>` or `jobs.lever.co/<slug>`.
+
+Jobs are kept only when they are relevant to your keywords: a keyword must be in the job
+title or mentioned at least twice in the description (see `scraper/relevance.py`).
+
+## Using the app
+
+- **Resume tab**: upload a resume, or update it by uploading a newer file (skills you added by hand carry over). Pick between stored resumes in the **Resume in use** dropdown. Type skills
+  your file doesn't mention into **Add a skill** (several at once, separated by commas); they are
+  saved with the resume and count in matching.
+- **Matches tab**: sliders set the minimum confidence and the most years a posting may ask for;
+  checkboxes hide jobs you cannot take; dropdowns choose your country, a source, a status and how
+  to sort. Each job is a card with its match score, the years it asks for, whether you can take
+  it, and the skills you have and lack. **Save** and **Hide** work from the card; hidden jobs
+  come back under Status: hidden. The card's expander holds the scores, must-have and
+  nice-to-have skills and the full posting, and its **Status** dropdown is your application tracker.
+- **Skills worth adding** (Matches tab): jobs that are only 1 to 3 must-have skills short of a
+  full match, with the skills that come up most. If you already have one, add it from the
+  dropdown. Buzzwords such as "AI" and "SaaS" are not counted as missing skills.
+- After scraping, adding skills or changing your country, click **Score stored jobs**.
+
+## Matching quality
+
+The score is `0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness`:
+
+- **ATS**: half TF-IDF keyword overlap, half skill coverage (share of the posting's known skills
+  that are on your resume).
+- **Experience**: 100 when you meet the years asked, minus 20 points per missing year. When a
+  posting states no number, seniority words in the title ("Senior", "Lead", "Junior") stand in;
+  with no cue at all the score is a neutral 70.
+- **Semantic**: MiniLM sentence-embedding similarity, scaled from the range seen on real postings.
+- **Freshness**: newer postings score higher.
+- **Location**: set `CANDIDATE_COUNTRY` in `.env` (for example `India`) and the total is multiplied
+  by 1.0 for a job in your country, 0.94 for worldwide remote, down to 0.4 for a job on-site abroad
+  or restricted to other countries, time zones or a language you were not asked about. The Matches
+  tab can hide those jobs and filter by the years of experience a posting asks for.
+
+These weights differ from the plan's 0.35/0.25/0.20/0.20 because they were measured:
+
+```bash
+python scripts/evaluate_matching.py --snapshot   # once: copy the labeled jobs from your database
+python scripts/evaluate_matching.py --weights    # precision@5, nDCG@10 and a ranked list
+```
+
+`eval/labeled_jobs.json` holds 52 real postings labeled good / partial / bad fit for one resume.
+On that set precision@5 went from 0.00 (plan weights and formulas) to 0.60, and nDCG@10 from
+0.07 to 0.85 once the home country is used. Edit the labels if you disagree with them, add your
+own, and re-run after any change under `matching/`. The set is small, so treat differences of
+one job in the top 5 as noise. Location rules are keyword-based (`matching/location.py`): a
+restriction worded in an unusual way can be missed, so read the posting before applying.
+
 ## Tests
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q
+python -m pytest -q             # offline unit tests (what CI runs)
+python -m pytest -m live -v     # opt-in smoke tests against the real job APIs
 ```
 
 ## Ethical scraping
 
-Prefer official/free APIs (RemoteOK, HN). The Playwright scrapers check `robots.txt`, wait between
-requests and cap each session at 50 jobs. Scraping Indeed/LinkedIn may break their Terms of Service;
-keep it to personal, low-volume learning use. See [SECURITY.md](SECURITY.md).
+Prefer the official/free APIs above. Every request checks `robots.txt`, waits between requests and
+each session is capped at 50 jobs. RemoteOK asks that you link back to the job and credit
+it as the source; the stored job URL does that.
+
+Indeed, LinkedIn and Naukri are **experimental** and off by default. LinkedIn's `robots.txt`
+disallows the job search, Naukri answers automated browsers with "Access Denied", and Indeed sits
+behind bot protection and restricts scraping in its Terms of Service. The scrapers return nothing
+when blocked and must never be changed to get around a block. See [SECURITY.md](SECURITY.md).

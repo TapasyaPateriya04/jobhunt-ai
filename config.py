@@ -53,12 +53,20 @@ class Settings:
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "mistral"
     gemini_api_key: Optional[str] = field(default=None, repr=False)  # never printed
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     docs_dir: Path = field(default_factory=lambda: Path("~/jobhunt_docs").expanduser())
     scrape_delay_seconds: float = 3.0
     max_jobs_per_session: int = 50
     upload_max_bytes: int = 2_000_000
     allow_remote_llm: bool = False
+    greenhouse_boards: tuple[str, ...] = ()
+    lever_companies: tuple[str, ...] = ()
+    candidate_country: str = ""
+    candidate_cities: tuple[str, ...] = ()
+
+
+def _env_list(name: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(p.strip() for p in (os.getenv(name) or "").split(",") if p.strip()))
 
 
 def get_settings(env_file: Optional[str | os.PathLike[str]] = None) -> Settings:
@@ -77,4 +85,8 @@ def get_settings(env_file: Optional[str | os.PathLike[str]] = None) -> Settings:
         max_jobs_per_session=_env_int("MAX_JOBS_PER_SESSION", 50),
         upload_max_bytes=_env_int("UPLOAD_MAX_BYTES", 2_000_000),
         allow_remote_llm=_env_bool("ALLOW_REMOTE_LLM", False),
+        greenhouse_boards=_env_list("GREENHOUSE_BOARDS"),
+        lever_companies=_env_list("LEVER_COMPANIES"),
+        candidate_country=(os.getenv("CANDIDATE_COUNTRY") or "").strip(),
+        candidate_cities=_env_list("CANDIDATE_CITIES"),
     )

@@ -60,7 +60,7 @@ def test_latex_experience_entries(latex_resume):
 
 
 def test_plain_text_resume():
-    parsed = parse_resume_text((FIX / "sample_resume.txt").read_text())
+    parsed = parse_resume_text((FIX / "sample_resume.txt").read_text(encoding="utf-8"))
     assert CONTRACT_KEYS <= set(parsed)
     assert parsed["summary"].startswith("Full-stack developer")
     assert {"C#", ".NET", "Node.js", "TypeScript", "HotChocolate"} <= set(parsed["skills"])
@@ -130,3 +130,23 @@ def test_analyze_jd():
 def test_analyze_jd_empty():
     assert analyze_jd("") == {"skills": [], "experience_years": None, "keywords": []}
     assert top_keywords("c++ c++ node.js") == ["c++", "node.js"]
+
+
+def test_skills_section_stops_at_combined_heading_and_drops_labels():
+    text = """Jane Doe
+Technical Skills
+Languages:Java (OOP, Collections), JavaScript, SQL
+Tools & Platforms:Git, Postman, VS Code, IntelliJ
+Practices:Code Reviews, RBAC, JWT
+CS Fundamentals:DBMS, Operating Systems
+Achievements & Leadership
+•Technical Head, Ignitia Fest - led all technical event planning across two consecutive years.
+•2nd Place, College Coding Competition - awarded Rs.8,000 prize out of 50+ teams.
+"""
+    skills = parse_resume_text(text)["skills"]
+    assert {"Java", "OOP", "JavaScript", "SQL", "Git", "Postman", "VS Code", "IntelliJ IDEA",
+            "Code Review", "RBAC", "JWT", "DBMS", "Operating Systems"} <= set(skills)
+    lowered = {s.lower() for s in skills}
+    assert not lowered & {"languages", "tools", "platforms", "practices", "cs fundamentals",
+                          "achievements & leadership", "technical head", "2nd place", "rs.8,000 prize"}
+    assert "Collections" in skills  # unknown items actually listed as skills are kept

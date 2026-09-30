@@ -45,7 +45,7 @@ def check_allowed(url: str) -> None:
         raise FetchBlocked(f"robots.txt disallows (or could not be checked for) {url}")
 
 
-def polite_get_json(url: str, params: dict | None = None, timeout=DEFAULT_TIMEOUT):
+def polite_get_json(url: str, params: dict | list | None = None, timeout=DEFAULT_TIMEOUT):
     """GET ``url`` and return decoded JSON, after allowlist/robots checks and rate limiting.
 
     Raises ``FetchBlocked`` if disallowed and ``requests.RequestException``/``ValueError``

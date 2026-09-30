@@ -1,0 +1,377 @@
+{
+ "profile": "Java/Spring Boot + React full-stack developer, under 1 year of experience (internships), based in India",
+ "candidate_country": "India",
+ "scale": {
+  "2": "good fit: right stack, junior-friendly, in India or remote worldwide",
+  "1": "partial: right stack and location but asks about 3 years or reads senior",
+  "0": "bad fit: wrong stack, too senior, or location rules the candidate out"
+ },
+ "labeled_on": "2026-09-30",
+ "note": "First-pass labels made by reading each posting. Edit a label if you disagree, then re-run scripts/evaluate_matching.py.",
+ "jobs": [
+  {
+   "url": "https://www.themuse.com/jobs/celonis/associate-software-engineer-java",
+   "title": "Associate Software Engineer - Java",
+   "company": "Celonis",
+   "label": 2,
+   "why": "Java/Spring, Bangalore, asks 1-3 years"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49552714",
+   "title": "Full Stack AI Engineer",
+   "company": "AiMi",
+   "label": 2,
+   "why": "React/Node/MongoDB full stack, remote anywhere, asks 2-3 years"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49523558",
+   "title": "Noida, India (Delhi NCR)",
+   "company": "Stpkr Technologies",
+   "label": 2,
+   "why": "Noida onsite, prefers recent undergraduates"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49534032",
+   "title": "2 Full Stack AI Engineer, 1 GTM",
+   "company": "Interview Resources",
+   "label": 2,
+   "why": "React/Node/Postgres full stack, remote, no years asked"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/celonis/software-engineer-java-springboot-saas",
+   "title": "Software Engineer - Java, Springboot, SAAS",
+   "company": "Celonis",
+   "label": 1,
+   "why": "Java/Spring Boot, Bangalore, but asks 3-6 years"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/jpmorganchase/software-engineer-iii-java-f7b697",
+   "title": "Software Engineer III - Java",
+   "company": "JPMorgan Chase",
+   "label": 1,
+   "why": "Java, Bangalore, but asks 3+ years"
+  },
+  {
+   "url": "https://remoteOK.com/remote-jobs/remote-frontend-engineer-bjak-1137420",
+   "title": "Frontend Engineer",
+   "company": "Bjak",
+   "label": 1,
+   "why": "React frontend, remote listing, reads senior"
+  },
+  {
+   "url": "https://remoteOK.com/remote-jobs/remote-frontend-engineer-bjak-1137410",
+   "title": "Frontend Engineer",
+   "company": "Bjak",
+   "label": 1,
+   "why": "React frontend, remote listing, reads senior"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49531439",
+   "title": "Frontend Engineer (Junior)",
+   "company": "FitMate",
+   "label": 0,
+   "why": "Junior React role but US residents only"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/kyndryl/java-developer-da00e6",
+   "title": "Java Developer",
+   "company": "Kyndryl",
+   "label": 0,
+   "why": "Java in India but asks 5-10 years"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/epamsystems/senior-software-engineer-java-ds-algo-microservices-63fec4",
+   "title": "Senior Software Engineer - Java, DS Algo, Microservices",
+   "company": "EPAM Systems",
+   "label": 0,
+   "why": "Java in India but asks 5-8 years"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/epamsystems/senior-software-engineer-java-angular-14a543",
+   "title": "Senior Software Engineer (Java, Angular)",
+   "company": "EPAM Systems",
+   "label": 0,
+   "why": "Java/Angular in India but asks 5-8 years"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/epamsystems/lead-cloud-native-developer-aws-java-b3d05e",
+   "title": "Lead Cloud Native Developer - AWS Java",
+   "company": "EPAM Systems",
+   "label": 0,
+   "why": "Java/AWS lead, asks 8+ years"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/jpmorganchase/lead-software-engineer-java-fullstack-react-bbc3c9",
+   "title": "Lead Software Engineer - Java Fullstack, React",
+   "company": "JPMorgan Chase",
+   "label": 0,
+   "why": "Java/React lead, asks 8+ years"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/paloaltonetworks/senior-it-software-engineer-5391fe",
+   "title": "Senior IT Software Engineer",
+   "company": "Palo Alto Networks",
+   "label": 0,
+   "why": "Senior, asks 5+ years and AI agent experience"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/jpmorganchase/software-engineer-ii-cc7862",
+   "title": "Software Engineer II",
+   "company": "JPMorgan Chase",
+   "label": 0,
+   "why": "Bangalore but cloud platform/Kubernetes, not Java or React"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49523768",
+   "title": "Associate Software Engineer, Expenses",
+   "company": "Justworks",
+   "label": 0,
+   "why": "Associate level but Toronto hybrid, Ruby/Go"
+  },
+  {
+   "url": "https://remoteOK.com/remote-jobs/remote-java-developer-clera-1136188",
+   "title": "Java Developer",
+   "company": "Clera",
+   "label": 0,
+   "why": "Java but Los Angeles, no visa sponsorship"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49525483",
+   "title": "Hiring Java Developer (Full-Time)",
+   "company": "Furtim Modus",
+   "label": 0,
+   "why": "Java but NYC hybrid"
+  },
+  {
+   "url": "https://www.arbeitnow.com/jobs/companies/knime-ag/full-stack-software-engineer-in-berlin-or-konstanz-328279",
+   "title": "Full-Stack Software Engineer (m/f/d) in Berlin or Konstanz",
+   "company": "KNIME AG",
+   "label": 0,
+   "why": "Full stack Java/React but Berlin, asks 5 years"
+  },
+  {
+   "url": "https://www.arbeitnow.ch/jobs/companies/sofitechsolutions/full-stack-developer-multichannel-experience-244022",
+   "title": "Full Stack Developer, Multichannel Experience",
+   "company": "Sofitechsolutions",
+   "label": 0,
+   "why": "Asks 4+ years Flutter"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49553487",
+   "title": "Full-Stack Developer",
+   "company": "Apex Dental Partners",
+   "label": 0,
+   "why": "US residents only"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49661611",
+   "title": "Full-Stack Engineer",
+   "company": "Obi9",
+   "label": 0,
+   "why": "Asks 5+ years, US time zones"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49553119",
+   "title": "L3 Software Engineer",
+   "company": "Natera",
+   "label": 0,
+   "why": "Remote USA only"
+  },
+  {
+   "url": "https://www.arbeitnow.com/jobs/companies/sc-media-house/werkstudent-full-stack-entwicklung-munich-196366",
+   "title": "Werkstudent Full-Stack Entwicklung (m/w/d)",
+   "company": "SC Media House",
+   "label": 0,
+   "why": "German-language working student job in Munich"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49525831",
+   "title": "YC 19",
+   "company": "Ashby",
+   "label": 0,
+   "why": "Senior/staff, Americas only"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49526894",
+   "title": "Software Engineer",
+   "company": "Silkline",
+   "label": 0,
+   "why": "Asks 5+ years, US persons only"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49522912",
+   "title": "Fullstack SWE",
+   "company": "Quill",
+   "label": 0,
+   "why": "US hours, early-stage senior full stack"
+  },
+  {
+   "url": "https://www.arbeitnow.co.uk/jobs/companies/checkoutcom/front-end-engineer-london-388985",
+   "title": "Front end Engineer",
+   "company": "Checkout.com",
+   "label": 0,
+   "why": "London onsite"
+  },
+  {
+   "url": "https://www.preiswecker.com/",
+   "title": "Software Engineer",
+   "company": "Preiswecker",
+   "label": 0,
+   "why": "Berlin, needs German"
+  },
+  {
+   "url": "https://jobs.lever.co/palantir/a3eaa0ef-3378-495f-8308-edbd9a93d26c",
+   "title": "Web Design Engineer",
+   "company": "Palantir",
+   "label": 0,
+   "why": "New York onsite, design engineering"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49523978",
+   "title": "B2B contract",
+   "company": "Vistulo",
+   "label": 0,
+   "why": "Poland/Romania residents only, asks 6+ years"
+  },
+  {
+   "url": "https://www.arbeitnow.co.uk/jobs/companies/faculty/full-stack-software-engineer-london-111691",
+   "title": "Full Stack Software Engineer",
+   "company": "Faculty",
+   "label": 0,
+   "why": "London, Python/AI"
+  },
+  {
+   "url": "https://www.arbeitnow.com/jobs/companies/assetmetrix-gmbh/lead-frontend-engineer-web-platform-architecture-munchen-437873",
+   "title": "Lead Frontend Engineer (m/f/d) - Web Platform & Architecture",
+   "company": "Assetmetrix Gmbh",
+   "label": 0,
+   "why": "Lead role in Munich"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49544301",
+   "title": "Founding Engineer",
+   "company": "Duets Network",
+   "label": 0,
+   "why": "US-based only, part-time equity"
+  },
+  {
+   "url": "https://remoteOK.com/remote-jobs/remote-sr-solutions-architect-extrahop-1137394",
+   "title": "Sr Solutions Architect",
+   "company": "ExtraHop",
+   "label": 0,
+   "why": "Solutions architect, senior"
+  },
+  {
+   "url": "https://remoteOK.com/remote-jobs/remote-data-analyst-seahub-asia-1136222",
+   "title": "Data Analyst",
+   "company": "SEAhub Asia",
+   "label": 0,
+   "why": "Data analyst in Kuala Lumpur"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49559854",
+   "title": "Research Engineer",
+   "company": "Flow Traders",
+   "label": 0,
+   "why": "Research engineer, asks 8 years"
+  },
+  {
+   "url": "https://www.arbeitnow.ch/jobs/companies/callista-group-ag/senior-software-engineer-java-kafka-integration-olten-461579",
+   "title": "Senior Software Engineer - Java, Kafka & Integration",
+   "company": "Callista Group AG",
+   "label": 0,
+   "why": "Senior Java in Switzerland, German"
+  },
+  {
+   "url": "https://jobs.lever.co/palantir/10dfc8bc-99ad-4ca2-ab76-853cb90a92c2",
+   "title": "Backend Software Engineer - Application Development",
+   "company": "Palantir",
+   "label": 0,
+   "why": "Palantir backend, London"
+  },
+  {
+   "url": "https://www.arbeitnow.com/jobs/companies/topi/senior-go-engineer-full-stack-berlin-germany-76088",
+   "title": "Senior Go Engineer, Full Stack",
+   "company": "Topi",
+   "label": 0,
+   "why": "Senior Go, Berlin"
+  },
+  {
+   "url": "https://remotive.com/remote-jobs/software-development/tech-lead-full-stack-rails-engineer-2069746",
+   "title": "Tech Lead Full-Stack Rails Engineer",
+   "company": "Mitre Media",
+   "label": 0,
+   "why": "Rails tech lead, US/Canada"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49523703",
+   "title": "SENIOR SOFTWARE ENGINEER (Python/Django + JavaScript - VueJS/React)",
+   "company": "VersaFeed.com",
+   "label": 0,
+   "why": "Senior Python/Django, USA only"
+  },
+  {
+   "url": "https://remoteOK.com/remote-jobs/remote-senior-net-software-engineer-okwhen-1137411",
+   "title": "Senior .NET Software Engineer",
+   "company": "OkWhen",
+   "label": 0,
+   "why": "Senior .NET"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/epamsystems/senior-software-developer-c-network-protocol-linux-56a005",
+   "title": "Senior Software Developer - C++, Network Protocol, Linux",
+   "company": "EPAM Systems",
+   "label": 0,
+   "why": "Senior C++ network protocols"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/kyndryl/mainframe-zos-system-programmer-6f1162",
+   "title": "Mainframe ZOS system programmer",
+   "company": "Kyndryl",
+   "label": 0,
+   "why": "Mainframe systems programmer"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/dtcc/lead-software-engineer-oracle-epm",
+   "title": "Lead Software Engineer (Oracle EPM)",
+   "company": "DTCC",
+   "label": 0,
+   "why": "Oracle EPM lead"
+  },
+  {
+   "url": "https://www.themuse.com/jobs/cornerstoneondemand/senior-principal-al-engineer-dd2794",
+   "title": "Senior Principal Al Engineer",
+   "company": "Cornerstone OnDemand",
+   "label": 0,
+   "why": "Senior principal AI engineer"
+  },
+  {
+   "url": "https://remoteOK.com/remote-jobs/remote-senior-shopify-developer-sanctuary-computer-1137405",
+   "title": "Senior Shopify Developer",
+   "company": "Sanctuary Computer",
+   "label": 0,
+   "why": "Senior Shopify developer"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49667711",
+   "title": "Robotics / Hardware Engineer",
+   "company": "Lumen Labs",
+   "label": 0,
+   "why": "Robotics hardware"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49598051",
+   "title": "CTO Partner",
+   "company": "BOSS-IQ",
+   "label": 0,
+   "why": "CTO partner"
+  },
+  {
+   "url": "https://news.ycombinator.com/item?id=49528608",
+   "title": "Senior Product Eng (full-stack), Brand Designer - Web, Senior Growth Marketer, Senior Product Marketer, Account Executive, Scale",
+   "company": "Railway",
+   "label": 0,
+   "why": "Senior product engineer"
+  }
+ ]
+}

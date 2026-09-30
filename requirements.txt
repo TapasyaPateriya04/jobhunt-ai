@@ -9,7 +9,7 @@ spacy==3.7.4
 pypdf==4.2.0
 
 # ML & Embeddings (all free, all local)
-scikit-learn==1.4.2
+scikit-learn==1.7.2          # 1.4.x bundles an old MSVC runtime that breaks torch imports on Windows
 sentence-transformers==3.0.1
 numpy==1.26.4
 
@@ -21,7 +21,7 @@ streamlit==1.35.0
 pandas==2.2.2
 
 # LLM (optional if using Ollama)
-google-generativeai==0.7.2   # Gemini free tier
+google-genai==2.25.0         # Gemini free tier (new SDK)
 
 # Utilities
 python-dotenv==1.0.1

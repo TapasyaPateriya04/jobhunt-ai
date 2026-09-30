@@ -118,12 +118,31 @@ def compute_dedupe_hash(job: dict) -> str:
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
+MAX_EXTRA_SKILLS = 60
+MAX_SKILL_LEN = 40
+
+
+def _clean_skills(skills: Any) -> list[str]:
+    """Trim, drop control characters and case-insensitive duplicates, cap count and length."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for skill in skills or []:
+        s = " ".join("".join(ch for ch in str(skill) if ch.isprintable()).split())[:MAX_SKILL_LEN]
+        if s and s.lower() not in seen:
+            seen.add(s.lower())
+            out.append(s)
+    return out[:MAX_EXTRA_SKILLS]
+
+
 def _resume_to_dict(r: Resume) -> dict:
+    parsed, extra = _loads_list(r.skills_json), _clean_skills(_loads_list(r.extra_skills_json))
+    known = {str(s).lower() for s in parsed}
     return {
         "id": r.id,
         "file_path": r.file_path,
         "raw_text": r.raw_text or "",
-        "skills": _loads_list(r.skills_json),
+        "skills": parsed + [s for s in extra if s.lower() not in known],
+        "extra_skills": extra,
         "experience": _loads_list(r.experience_json),
         "education": r.education or "",
         "summary": r.summary or "",
@@ -176,22 +195,36 @@ def _document_to_dict(d: Document) -> dict:
 
 # --------------------------------------------------------------------------- resumes
 
-def save_resume(parsed: dict, file_path: str, *, session: Optional[Session] = None) -> int:
-    """Persist a parsed resume dict; returns the new resume id."""
+def save_resume(parsed: dict, file_path: str, *, inherit_skills_from: Optional[int] = None,
+                session: Optional[Session] = None) -> int:
+    """Persist a parsed resume dict; returns its resume id.
+
+    Saving a resume whose text is already stored refreshes that row (newer parse, path and
+    timestamp) and returns its id, so re-running the pipeline does not pile up copies.
+    Skills the user added by hand (``extra_skills``) are kept. A resume with new text is
+    a new row; pass ``inherit_skills_from`` (the resume it replaces) to carry those skills over.
+    """
     parsed = parsed or {}
     skills = parsed.get("skills") or []
     experience = parsed.get("experience") or []
+    raw_text = parsed.get("raw_text") or ""
     with _scope(session) as s:
-        r = Resume(
-            file_path=_str_or_none(file_path),
-            raw_text=parsed.get("raw_text") or "",
-            skills_json=json.dumps(list(skills), ensure_ascii=False, default=str),
-            experience_json=json.dumps(list(experience), ensure_ascii=False, default=str),
-            education=_str_or_none(parsed.get("education")),
-            summary=_str_or_none(parsed.get("summary")),
-            created_at=utcnow(),
-        )
-        s.add(r)
+        r = None
+        if raw_text.strip():
+            r = s.scalars(select(Resume).where(Resume.raw_text == raw_text)
+                          .order_by(Resume.id).limit(1)).first()
+        if r is None:
+            r = Resume(raw_text=raw_text)
+            old = s.get(Resume, _to_int_or_none(inherit_skills_from)) if inherit_skills_from is not None else None
+            if old is not None:
+                r.extra_skills_json = old.extra_skills_json
+            s.add(r)
+        r.file_path = _str_or_none(file_path)
+        r.skills_json = json.dumps(list(skills), ensure_ascii=False, default=str)
+        r.experience_json = json.dumps(list(experience), ensure_ascii=False, default=str)
+        r.education = _str_or_none(parsed.get("education"))
+        r.summary = _str_or_none(parsed.get("summary"))
+        r.created_at = utcnow()
         s.flush()
         return int(r.id)
 
@@ -203,6 +236,29 @@ def get_resume(id: int, *, session: Optional[Session] = None) -> Optional[dict]:
     with _scope(session) as s:
         r = s.get(Resume, rid)
         return _resume_to_dict(r) if r else None
+
+
+def list_resumes(limit: int = 50, *, session: Optional[Session] = None) -> list[dict]:
+    """Stored resumes, newest first (without the full text)."""
+    with _scope(session) as s:
+        rows = s.scalars(select(Resume).order_by(Resume.created_at.desc(), Resume.id.desc())
+                         .limit(_clamp_limit(limit))).all()
+        return [{"id": r.id, "file_path": r.file_path, "created_at": r.created_at,
+                 "skill_count": len(_resume_to_dict(r)["skills"])} for r in rows]
+
+
+def set_extra_skills(resume_id: int, skills: Iterable[str], *, session: Optional[Session] = None) -> list[str]:
+    """Replace the skills a user added by hand to a resume. Returns the cleaned list.
+    Raises ``ValueError`` if the resume does not exist."""
+    rid = _to_int_or_none(resume_id)
+    cleaned = _clean_skills(skills)
+    with _scope(session) as s:
+        r = s.get(Resume, rid) if rid is not None else None
+        if r is None:
+            raise ValueError("resume not found")
+        r.extra_skills_json = json.dumps(cleaned, ensure_ascii=False)
+        s.flush()
+    return cleaned
 
 
 def latest_resume(*, session: Optional[Session] = None) -> Optional[dict]:
