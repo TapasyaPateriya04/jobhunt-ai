@@ -37,9 +37,12 @@ LSA_WEIGHT = 0.3
 # generic English); linearly rescale [LOW, HIGH] -> [0, 100] (monotonic, clamped).
 FALLBACK_LOW = 0.05
 FALLBACK_HIGH = 0.55
-# MiniLM cosine for unrelated texts is ~0.0-0.2 and strong matches ~0.6-0.8.
-EMBED_LOW = 0.10
-EMBED_HIGH = 0.75
+# Calibrated on 156 real postings against a real resume (2026-09-30, see
+# scripts/evaluate_matching.py): unrelated jobs (nurse, accountant, cook) score 0.10-0.25,
+# real software jobs 0.13-0.63 (median 0.35), a hand-written ideal posting 0.67.
+# Long postings score lower than short ones because company boilerplate dilutes them.
+EMBED_LOW = 0.20
+EMBED_HIGH = 0.60
 
 _model = None
 _model_failed = False

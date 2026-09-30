@@ -62,14 +62,20 @@ code MUST degrade gracefully when they are missing (tests run without them).
 - `generator/llm.py`: `call_llm(prompt) -> str` (Ollama then Gemini fallback; raises `LLMUnavailable` with a helpful message).
 - `generator/cover_letter.py`: `generate_cover_letter(resume: dict, job: dict) -> str`.
 - `generator/resume_optimizer.py`: `suggest_resume_edits(resume: dict, job: dict) -> str`.
+- `generator/jd_insights.py`: `split_requirements(jd_text) -> {"must_have", "nice_to_have", "source"}` (rules, instant),
+  `analyze_requirements_llm(job) -> same` (LLM; only skills present in the posting are kept).
 - `generator/documents.py`: `save_generated_doc(match_id, doc_type, content) -> str` (writes into docs_dir with safe_join, stores via repository).
 
 ## matching/ (owner: ML)
-- `matching/ats_scorer.py`: `ats_score(resume_text, jd_text) -> float` (0-100), `keyword_gap(resume_text, jd_text, top_n=15) -> dict` (`matched`, `missing`).
+- `matching/ats_scorer.py`: `ats_score(resume_text, jd_text) -> float` (0-100), `keyword_gap(resume_text, jd_text, top_n=15) -> dict` (`matched`, `missing`; known skills first, canonical names).
 - `matching/semantic_matcher.py`: `semantic_score(resume_text, jd_text) -> float`; lazy-loads `all-MiniLM-L6-v2`;
   falls back to TF-IDF char n-gram / LSA similarity when sentence-transformers unavailable.
 - `matching/confidence_score.py`: `calculate_confidence_score(resume: dict, job: dict) -> dict` with keys
-  `total, ats, experience, semantic, freshness` using weights 0.35/0.25/0.20/0.20; plus `score_jobs(resume, jobs) -> list[dict]`.
+  `total, ats, experience, semantic, freshness` using weights 0.35/0.30/0.25/0.10 (plus `ats_raw`, `skill_coverage`,
+  `candidate_years`, `required_years`); `score_jobs(resume, jobs) -> list[dict]`; `required_years_for(job)`,
+  `seniority_years(job)`. `ats` = half calibrated TF-IDF, half `ats_scorer.skill_coverage`.
+- `matching/evaluation.py`: `precision_at_k`, `ndcg_at_k`, `rank`, `metrics` for `scripts/evaluate_matching.py`
+  (labels in `eval/labeled_jobs.json`: 2 good, 1 partial, 0 bad).
 
 ## ui/ (owner: frontend)
 - `ui/app.py` Streamlit with the four tabs from SPEC §7 (Resume, Scrape Jobs, Matches, Generate Docs), wired to the

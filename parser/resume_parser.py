@@ -69,7 +69,13 @@ def _normalize_heading(line: str) -> str | None:
     s = re.sub(r"[#=*_\-\s:|]+$", "", s)
     s = s.replace("&", "and") if s.lower().replace("&", "and") in _HEADING_LOOKUP else s
     key = re.sub(r"\s+", " ", s).strip().lower()
-    return _HEADING_LOOKUP.get(key)
+    if key in _HEADING_LOOKUP:
+        return _HEADING_LOOKUP[key]
+    # Combined headings such as "Achievements & Leadership": every part must be a heading.
+    parts = [p.strip() for p in re.split(r"\s*(?:&|/|\band\b)\s*", key) if p.strip()]
+    if len(parts) >= 2 and all(p in _HEADING_LOOKUP for p in parts):
+        return _HEADING_LOOKUP[parts[0]]
+    return None
 
 
 def extract_sections(text: str) -> dict[str, str]:
@@ -336,6 +342,13 @@ def _skills_section_items(skills_text: str) -> list[str]:
     return items
 
 
+# Category labels inside a skills section ("Languages: Java, SQL"), never skills themselves.
+_SKILL_LABELS = frozenset("""
+languages frontend backend databases database tools platforms practices frameworks libraries
+technologies others other misc cloud devops testing concepts fundamentals soft skills
+""".split()) | {"tools & platforms", "tools and platforms", "cs fundamentals", "core concepts",
+                "programming languages", "web technologies", "developer tools", "soft skills"}
+
 _spacy_nlp = None
 _spacy_failed = False
 
@@ -376,13 +389,18 @@ def extract_skills(text: str, skills_section: str = "") -> list[str]:
         add(s)
     for s in find_skills(text):
         add(s)
-    extra = _skills_section_items(skills_section) + _spacy_hints(skills_section)
-    for item in extra:
+    for item in _skills_section_items(skills_section):
         canon = canonicalize(item)
         if canon:
             add(canon)
-        elif not find_skills(item) and item[0].isalnum():
+        elif not find_skills(item) and item[0].isalnum() and item.lower() not in _SKILL_LABELS:
             add(item)
+    # spaCy noun chunks are only trusted when they name a known skill: on real resumes the
+    # unknown ones were category labels and sentence fragments ("Tools", "Rs.8,000 prize").
+    for item in _spacy_hints(skills_section):
+        canon = canonicalize(item)
+        if canon:
+            add(canon)
     return ordered
 
 
@@ -397,7 +415,9 @@ def parse_resume_text(text: str) -> dict:
     if not summary:
         # Fall back to the first paragraph after the header block (name/contact lines).
         header = sections.get("header", "")
-        paras = [p.strip() for p in re.split(r"\n\s*\n", header) if len(p.strip()) > 80]
+        # Contact lines (email, links, phone) are not a summary.
+        paras = [p.strip() for p in re.split(r"\n\s*\n", header) if len(p.strip()) > 80
+                 and not re.search(r"@|https?://|\.com\b|linkedin|github|\+?\d[\d\s-]{8,}\d", p, re.I)]
         summary = paras[0] if paras else ""
     return {
         "raw_text": text,

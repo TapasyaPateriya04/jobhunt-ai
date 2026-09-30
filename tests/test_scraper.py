@@ -85,6 +85,11 @@ def test_extract_experience_years(text, years):
     assert extract_experience_years(text) == years
 
 
+def test_extract_experience_years_ignores_company_age():
+    text = "Profitable, 18+ yrs stable, employee-owned. You: 5+ yr senior dev who has seen it all."
+    assert extract_experience_years(text) == 5
+
+
 def test_parse_posted_date_variants():
     now = datetime.utcnow()
     assert abs(parse_posted_date("3 days ago") - (now - timedelta(days=3))) < timedelta(minutes=1)

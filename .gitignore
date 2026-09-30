@@ -10,3 +10,7 @@ uploads/
 jobhunt_docs/
 .pytest_cache/
 .streamlit/secrets.toml
+
+# Local evaluation snapshots (scraped job text and your resume); labels are committed
+eval/jobs_snapshot.json
+eval/resume_snapshot.json

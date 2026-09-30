@@ -227,7 +227,7 @@ def test_rate_limiter_sync_spacing():
     start = time.monotonic()
     for _ in range(3):
         rl.wait()
-    assert time.monotonic() - start >= 0.095
+    assert time.monotonic() - start >= 0.08  # two 0.05 s gaps, minus Windows' ~16 ms clock tick
 
 
 def test_rate_limiter_thread_safe():
@@ -260,7 +260,7 @@ def test_rate_limiter_async():
         await asyncio.gather(*(rl.await_turn() for _ in range(3)))
         return time.monotonic() - start
 
-    assert asyncio.run(run()) >= 0.095
+    assert asyncio.run(run()) >= 0.08  # two 0.05 s gaps, minus Windows' ~16 ms clock tick
 
 
 def test_rate_limiter_rejects_negative():

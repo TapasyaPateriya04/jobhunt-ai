@@ -19,7 +19,7 @@ Everything runs on your laptop. The full plan lives in [docs/SPEC.md](docs/SPEC.
 Resume (.tex/.txt/.md/.pdf) ─► parser ─► SQLite ◄─ scraper (RemoteOK, HN, The Muse, Arbeitnow, ...)
                                             │
                                             ▼
-                         matching: 0.35 ATS + 0.25 experience + 0.20 semantic + 0.20 freshness
+                         matching: 0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness
                                             │
                                             ▼
                      Streamlit dashboard ─► cover letter / resume suggestions (Ollama or Gemini)
@@ -89,6 +89,31 @@ For Greenhouse and Lever the slug is the last part of the company's careers URL:
 
 Jobs are kept only when they are relevant to your keywords: a keyword must be in the job
 title or mentioned at least twice in the description (see `scraper/relevance.py`).
+
+## Matching quality
+
+The score is `0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness`:
+
+- **ATS**: half TF-IDF keyword overlap, half skill coverage (share of the posting's known skills
+  that are on your resume).
+- **Experience**: 100 when you meet the years asked, minus 20 points per missing year. When a
+  posting states no number, seniority words in the title ("Senior", "Lead", "Junior") stand in;
+  with no cue at all the score is a neutral 70.
+- **Semantic**: MiniLM sentence-embedding similarity, scaled from the range seen on real postings.
+- **Freshness**: newer postings score higher.
+
+These weights differ from the plan's 0.35/0.25/0.20/0.20 because they were measured:
+
+```bash
+python scripts/evaluate_matching.py --snapshot   # once: copy the labeled jobs from your database
+python scripts/evaluate_matching.py --weights    # precision@5, nDCG@10 and a ranked list
+```
+
+`eval/labeled_jobs.json` holds 52 real postings labeled good / partial / bad fit for one resume.
+On that set precision@5 went from 0.00 (plan weights and formulas) to 0.60. Edit the labels if
+you disagree with them, add your own, and re-run after any change under `matching/`. The set is
+small, so treat differences of one job in the top 5 as noise. The score does not know where you
+are allowed to work: postings limited to another country can still rank high.
 
 ## Tests
 

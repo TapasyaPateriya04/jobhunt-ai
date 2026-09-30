@@ -7,10 +7,12 @@ import numpy as np
 import pytest
 
 from matching import ats_scorer, semantic_matcher
-from matching.ats_scorer import ats_raw_score, ats_score, calibrate, keyword_gap
+from matching.ats_scorer import (
+    ats_raw_score, ats_score, blended_ats, calibrate, keyword_gap, skill_coverage,
+)
 from matching.confidence_score import (
     WEIGHTS, calculate_confidence_score, estimate_candidate_years, experience_score,
-    extract_required_years, freshness_score, score_jobs,
+    extract_required_years, freshness_score, required_years_for, score_jobs, seniority_years,
 )
 from matching.semantic_matcher import chunk_text, semantic_score, semantic_scores
 
@@ -63,13 +65,34 @@ def test_calibration_monotonic_and_bounded():
 
 def test_keyword_gap_matched_and_missing():
     gap = keyword_gap("python django docker", "python django kubernetes terraform", top_n=10)
-    joined_m, joined_x = " ".join(gap["matched"]), " ".join(gap["missing"])
-    assert "python" in joined_m and "django" in joined_m
-    assert "kubernetes" in joined_x and "terraform" in joined_x
-    assert len(gap["matched"]) + len(gap["missing"]) <= 10
+    assert gap == {"matched": ["Python", "Django"], "missing": ["Kubernetes", "Terraform"]}
     assert keyword_gap("python", "") == {"matched": [], "missing": []}
     gap2 = keyword_gap("", "python java")
-    assert gap2["matched"] == [] and set(gap2["missing"]) == {"python", "java"}
+    assert gap2["matched"] == [] and set(gap2["missing"]) == {"Python", "Java"}
+
+
+def test_keyword_gap_lists_skills_first_and_drops_filler():
+    jd = ("Join our team! We work on great software products. https://example.com/apply "
+          "You will build Spring Boot microservices and React dashboards for logistics "
+          "customers, with Kafka and PostgreSQL. Logistics domain knowledge is a plus.")
+    gap = keyword_gap("Java, Spring Boot, React, MongoDB. Built microservices.", jd, top_n=8)
+    assert gap["matched"][:3] == ["Spring Boot", "Microservices", "React"]
+    assert gap["missing"][:2] == ["Kafka", "PostgreSQL"]
+    listed = [t.lower() for t in gap["matched"] + gap["missing"]]
+    assert "logistics" in listed  # a real domain term still fills the remaining slots
+    assert not {"team", "work", "software", "https", "products", "join"} & set(listed)
+    assert len(listed) <= 8
+
+
+def test_skill_coverage_and_blend():
+    have = {"Java", "Spring Boot", "React"}
+    assert skill_coverage(have, "Java, Spring Boot, Kafka and AWS") == 50.0
+    assert skill_coverage(have, "Java and teamwork") is None  # too few skills named to judge
+    assert skill_coverage(set(), "Java, Spring Boot, Kafka") == 0.0
+    assert blended_ats(40.0, None) == 40.0 and blended_ats(40.0, 80.0) == 60.0
+    s = calculate_confidence_score({"raw_text": "Java Spring Boot React developer"},
+                                   {"title": "Java Developer", "description": "Java, Spring Boot, Kafka, AWS"})
+    assert s["skill_coverage"] == 50.0
 
 
 # ------------------------------------------------------------------ semantic
@@ -171,10 +194,50 @@ def test_extract_required_years(text, expected):
 
 def test_experience_score():
     assert experience_score(5, 3) == 100
-    assert experience_score(1, 4) == 40  # floor
-    assert experience_score(3, 4) == 75
+    assert experience_score(3, 4) == 80   # 20 points per missing year
+    assert experience_score(1, 4) == 40
+    assert experience_score(0.7, 1) == pytest.approx(94)
+    assert experience_score(0.7, 8) == 0  # far out of reach, no floor
     assert experience_score(0, 0) == 100
-    assert experience_score([], None) == 40  # default requirement 2 years
+    assert experience_score([], None) == 70  # unknown requirement is neutral
+    # A junior candidate can now tell a 1-year ask from an 8-year ask.
+    assert experience_score(0.7, 1) > experience_score(0.7, 3) > experience_score(0.7, 8)
+
+
+@pytest.mark.parametrize("title, description, expected", [
+    ("Senior Software Engineer", "", 5), ("Sr. Backend Developer", "", 5),
+    ("Lead Frontend Engineer", "", 7), ("Staff Engineer", "", 7),
+    ("Principal Engineer", "", 10), ("Senior Principal AI Engineer", "", 10),
+    ("Junior Frontend Engineer", "", 0), ("Software Engineering Intern", "", 0),
+    ("Associate Software Engineer", "", 1), ("Werkstudent Full-Stack", "", 0),
+    ("Software Engineer", "We prefer current and recent undergraduates.", 0),
+    ("Software Engineer", "Build things.\n\nLevel: Mid Level", 3),
+    ("Software Engineer", "Build things.\n\nLevel: Senior Level", 5),
+    ("Software Engineer", "Build things with Java.", None),
+    ("Leadership Coach", "", None),  # "lead" must be a whole word
+])
+def test_seniority_years(title, description, expected):
+    assert seniority_years({"title": title, "description": description}) == expected
+
+
+def test_required_years_prefers_stated_number_over_seniority():
+    assert required_years_for({"title": "Senior Engineer", "description": "3+ years of experience"}) == 3
+    assert required_years_for({"title": "Senior Engineer", "description": "Great team."}) == 5
+    assert required_years_for({"title": "Engineer", "experience_years": 2, "description": "Senior"}) == 2
+    assert required_years_for({"title": "Engineer", "description": "Great team."}) is None
+
+
+def test_ranking_metrics():
+    from matching.evaluation import metrics, ndcg_at_k, precision_at_k, weighted_total
+
+    labels = [2, 0, 1, 0, 0, 2]
+    assert precision_at_k(labels, 5) == 0.4 and precision_at_k(labels, 5, threshold=2) == 0.2
+    assert precision_at_k([], 5) == 0.0
+    assert ndcg_at_k([2, 2, 1, 0, 0, 0]) == 1.0 and 0 < ndcg_at_k(labels) < 1 and ndcg_at_k([0, 0]) == 0.0
+    m = metrics([{"label": x} for x in labels])
+    assert (m["n"], m["good"], m["partial"], m["p_at_5"]) == (6, 2, 1, 0.4)
+    total = weighted_total({"ats": 1.0, "semantic": 1.0})
+    assert total({"ats": 40, "semantic": 60, "experience": 100, "freshness": 100}) == 50
 
 
 # ------------------------------------------------------------------ confidence / score_jobs

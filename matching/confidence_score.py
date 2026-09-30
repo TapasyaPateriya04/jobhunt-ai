@@ -1,6 +1,11 @@
 """Confidence score (SPEC §5.3): weighted blend of ATS, experience, semantic, freshness.
 
-total = 0.35 * ats + 0.25 * experience + 0.20 * semantic + 0.20 * freshness   (all 0-100)
+total = 0.35 * ats + 0.30 * experience + 0.25 * semantic + 0.10 * freshness   (all 0-100)
+
+The SPEC's 0.35/0.25/0.20/0.20 put a week-old perfect match below a fresh poor one.
+Measured on 52 hand-labeled real jobs (scripts/evaluate_matching.py), halving freshness
+and moving that weight to experience and semantic raised precision@5. ``ats`` is half
+TF-IDF keyword overlap and half skill coverage (share of the posting's skills the resume has).
 """
 from __future__ import annotations
 
@@ -8,12 +13,17 @@ import re
 from datetime import date, datetime, timezone
 from typing import Any, Iterable, List, Optional, Tuple
 
-from matching.ats_scorer import batch_raw_cosines, calibrate
+from matching.ats_scorer import batch_raw_cosines, blended_ats, calibrate, skill_coverage
 from matching.semantic_matcher import semantic_scores
+from parser.skills_vocab import find_skills
 
-WEIGHTS = {"ats": 0.35, "experience": 0.25, "semantic": 0.20, "freshness": 0.20}
-DEFAULT_REQUIRED_YEARS = 2
+WEIGHTS = {"ats": 0.35, "experience": 0.30, "semantic": 0.25, "freshness": 0.10}
 MAX_YEARS = 50
+# Experience score when the posting gives no years and no seniority cue: neutral, so an
+# unknown requirement neither beats a stated match nor sinks the job.
+UNKNOWN_REQUIREMENT_SCORE = 70.0
+# Points lost per year the candidate is short of the requirement (5+ years short -> 0).
+POINTS_PER_MISSING_YEAR = 20.0
 
 # ----------------------------------------------------------------------------- text helpers
 
@@ -259,25 +269,71 @@ def extract_required_years(text: str) -> Optional[int]:
     return (tied or [a for _, a in candidates])[0]
 
 
+# Seniority words -> typical years asked, used only when a posting states no number.
+# Checked in order, so "Senior Associate" reads as senior.
+_SENIORITY = [
+    (re.compile(r"\b(principal|distinguished|director|vp|vice president|head of|cto|chief)\b", re.I), 10),
+    (re.compile(r"\b(staff|lead|architect|manager|founding)\b", re.I), 7),
+    (re.compile(r"\b(senior|sr)\b\.?", re.I), 5),
+    (re.compile(r"\b(intern|internship|trainee|fresher|freshers|graduate|new grad|entry[- ]level|"
+                r"junior|jr|working student|werkstudent)\b\.?", re.I), 0),
+    (re.compile(r"\bassociate\b", re.I), 1),
+]
+_LEVEL_LINE_RE = re.compile(r"^Level:\s*(.+)$", re.I | re.M)  # appended by the Muse source
+_LEVEL_YEARS = {"internship": 0, "entry level": 0, "mid level": 3, "senior level": 5, "management": 8}
+_FRESHER_TEXT_RE = re.compile(
+    r"recent (under)?graduates?|new grad(uate)?s?\b|\bfreshers?\b|no (prior )?experience (required|needed)|"
+    r"still in college|current (students|undergraduates)", re.I)
+
+
+def seniority_years(job: dict) -> Optional[int]:
+    """Years implied by the title ("Senior", "Lead", "Junior"), a fresher-friendly
+    description, or a "Level:" line. ``None`` when there is no cue."""
+    job = job or {}
+    title = str(job.get("title") or "")
+    for pattern, years in _SENIORITY:
+        if pattern.search(title):
+            return years
+    text = job_text(job)
+    if _FRESHER_TEXT_RE.search(text):
+        return 0
+    m = _LEVEL_LINE_RE.search(text)
+    if m:
+        found = [y for name, y in _LEVEL_YEARS.items() if name in m.group(1).lower()]
+        if found:
+            return min(found)
+    return None
+
+
 def required_years_for(job: dict) -> Optional[int]:
+    """Years of experience a job asks for: the stated number, else what its seniority implies."""
     v = (job or {}).get("experience_years")
     yrs = _years_value(v)
     if yrs is not None:
         return int(round(yrs))
-    return extract_required_years(job_text(job))
+    stated = extract_required_years(job_text(job))
+    return stated if stated is not None else seniority_years(job)
 
 
 def experience_score(resume_exp: Any, required_years: Optional[float]) -> float:
+    """100 when the candidate meets the requirement, then 20 points off per missing year.
+
+    The SPEC's ``max(40, candidate/required)`` gave a 1-year and an 8-year requirement the
+    same 40 for a junior candidate, so it could not rank jobs by reachability. An unknown
+    requirement scores a neutral ``UNKNOWN_REQUIREMENT_SCORE``.
+    """
+    if required_years is None:
+        return UNKNOWN_REQUIREMENT_SCORE
     candidate = resume_exp if isinstance(resume_exp, (int, float)) else estimate_candidate_years(resume_exp)
-    required = DEFAULT_REQUIRED_YEARS if required_years is None else required_years
-    if required <= 0 or candidate >= required:
+    if required_years <= 0 or candidate >= required_years:
         return 100.0
-    return float(max(40.0, min(100.0, candidate / required * 100.0)))
+    return float(max(0.0, 100.0 - POINTS_PER_MISSING_YEAR * (required_years - candidate)))
 
 # ----------------------------------------------------------------------------- scoring
 
 def _combine(ats: float, ats_raw: float, exp: float, sem: float, fresh: float,
-             candidate_years: float, required_years: Optional[int]) -> dict:
+             candidate_years: float, required_years: Optional[int],
+             coverage: Optional[float] = None) -> dict:
     total = (WEIGHTS["ats"] * ats + WEIGHTS["experience"] * exp
              + WEIGHTS["semantic"] * sem + WEIGHTS["freshness"] * fresh)
     return {
@@ -287,6 +343,7 @@ def _combine(ats: float, ats_raw: float, exp: float, sem: float, fresh: float,
         "semantic": round(sem, 1),
         "freshness": round(fresh, 1),
         "ats_raw": round(ats_raw, 1),
+        "skill_coverage": None if coverage is None else round(coverage, 1),
         "candidate_years": candidate_years,
         "required_years": required_years,
     }
@@ -298,11 +355,14 @@ def _score_batch(resume: dict, jobs: List[dict]) -> List[dict]:
     raws = batch_raw_cosines(rtext, jtexts)  # single TF-IDF fit across the batch
     sems = semantic_scores(rtext, jtexts)
     cand = estimate_candidate_years((resume or {}).get("experience"))
+    have = set(find_skills(rtext))
     out = []
-    for job, raw, sem in zip(jobs, raws, sems):
+    for job, jtext, raw, sem in zip(jobs, jtexts, raws, sems):
         req = required_years_for(job)
-        out.append(_combine(calibrate(raw), raw * 100.0, experience_score(cand, req), sem,
-                            freshness_score((job or {}).get("posted_date")), cand, req))
+        coverage = skill_coverage(have, jtext)
+        out.append(_combine(blended_ats(calibrate(raw), coverage), raw * 100.0,
+                            experience_score(cand, req), sem,
+                            freshness_score((job or {}).get("posted_date")), cand, req, coverage))
     return out
 
 
@@ -324,5 +384,5 @@ def score_jobs(resume: dict, jobs: Iterable[dict]) -> List[dict]:
 
 __all__ = [
     "calculate_confidence_score", "score_jobs", "freshness_score", "experience_score",
-    "estimate_candidate_years", "extract_required_years", "WEIGHTS",
+    "estimate_candidate_years", "extract_required_years", "seniority_years", "required_years_for", "WEIGHTS",
 ]

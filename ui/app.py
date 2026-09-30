@@ -355,11 +355,62 @@ def _match_detail(m: dict, resume_text: str) -> None:
             except Exception:
                 c.log.exception("keyword_gap failed")
                 st.caption("Keyword analysis unavailable.")
+            _requirements(m, match_id, resume_text, jd)
         current = g(m, "status", default="new")
         if match_id is not None:
             st.selectbox("Status", c.MATCH_STATUSES,
                          index=c.MATCH_STATUSES.index(current) if current in c.MATCH_STATUSES else 0,
                          key=f"status_{match_id}", on_change=_on_status_change, args=(match_id,))
+
+
+@st.cache_data(show_spinner=False, max_entries=512)
+def _rule_requirements(jd_text: str) -> dict:
+    return load("generator.jd_insights", "split_requirements")(jd_text)
+
+
+@st.cache_data(show_spinner=False, max_entries=512)
+def _resume_skills(resume_text: str) -> set:
+    return set(load("parser.skills_vocab", "find_skills")(resume_text))
+
+
+def _requirements(m: dict, match_id, resume_text: str, jd: str) -> None:
+    """Must-have vs nice-to-have skills: instant rule-based split, LLM on request."""
+    key = f"req_llm_{match_id}"
+    try:
+        req = st.session_state.get(key) or _rule_requirements(jd)
+        have = _resume_skills(resume_text)
+    except Exception:
+        c.log.exception("requirement split failed")
+        return
+    if not req.get("must_have") and not req.get("nice_to_have"):
+        return
+    left, right = st.columns(2)
+    for col, title, field in ((left, "Must-have skills", "must_have"),
+                              (right, "Nice-to-have skills", "nice_to_have")):
+        with col:
+            st.markdown(f"**{title}**")
+            skills = req.get(field, [])
+            for kind, group in (("ok", [s for s in skills if s in have]),
+                                ("miss", [s for s in skills if s not in have])):
+                if group:
+                    c.chips(group, kind)
+            if not skills:
+                st.caption("None found.")
+    source = "language model" if req.get("source") == "llm" else "keyword rules"
+    st.caption(f"Green = on your resume, red = missing. Split by {source}.")
+    if match_id is not None and req.get("source") != "llm" and st.button(
+            "Re-check with the language model", key=f"req_btn_{match_id}"):
+        try:
+            with st.spinner("Asking the language model... (local models can take a minute)"):
+                st.session_state[key] = load("generator.jd_insights", "analyze_requirements_llm")(
+                    {"title": g(m, "title"), "description": jd})
+            st.rerun()
+        except Exception as exc:
+            if _is_llm_unavailable(exc):
+                st.warning(c.LLM_HELP)
+            else:
+                c.log.exception("LLM requirement analysis failed")
+                st.warning("The language model could not analyse this posting.")
 
 
 def _on_status_change(match_id: int) -> None:
