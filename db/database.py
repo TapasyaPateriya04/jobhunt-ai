@@ -9,6 +9,7 @@ import os
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Iterator, Optional
 
 from sqlalchemy import (
@@ -173,16 +174,50 @@ def get_engine(url: Optional[str] = None) -> Engine:
         return engine
 
 
+MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
+
+
 def init_db(engine: Optional[Engine] = None) -> Engine:
-    """Create all tables (idempotent). Returns the engine used."""
+    """Bring the database schema up to date (idempotent). Returns the engine used.
+
+    Runs the Alembic migrations in ``db/migrations``. The first migration only creates what
+    is missing, so databases made before migrations existed are upgraded in place. Without
+    Alembic installed it falls back to ``create_all`` plus the column additions below.
+    """
     engine = engine or get_engine()
-    Base.metadata.create_all(engine)
-    _add_missing_columns(engine)
+    try:
+        from alembic import command
+    except ImportError:
+        Base.metadata.create_all(engine)
+        _add_missing_columns(engine)
+        return engine
+    with engine.begin() as conn:
+        command.upgrade(alembic_config(conn), "head")
     return engine
 
 
-# Nullable columns added after the first release: (table, column, SQL type). ``create_all``
-# never alters an existing table, so databases made earlier get them here.
+def alembic_config(connection=None):
+    """Alembic settings pointing at ``db/migrations``; ``connection`` is used when given."""
+    from alembic.config import Config
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
+    if connection is not None:
+        cfg.attributes["connection"] = connection
+    return cfg
+
+
+def schema_revision(engine: Optional[Engine] = None) -> Optional[str]:
+    """The migration the database is at, or None before migrations were applied."""
+    engine = engine or get_engine()
+    if "alembic_version" not in inspect(engine).get_table_names():
+        return None
+    with engine.connect() as conn:
+        return conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+
+
+# Used only when Alembic is not installed: nullable columns added after the first release
+# (table, column, SQL type). ``create_all`` never alters an existing table.
 _ADDED_COLUMNS = (("resumes", "extra_skills_json", "TEXT"),)
 
 
@@ -248,6 +283,8 @@ __all__ = [
     "utcnow",
     "get_engine",
     "init_db",
+    "alembic_config",
+    "schema_revision",
     "get_session",
     "resolve_database_url",
     "dispose_engines",

@@ -13,3 +13,4 @@ rich
 pytest
 python-docx
 fpdf2
+alembic

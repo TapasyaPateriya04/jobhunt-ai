@@ -225,7 +225,8 @@ def tab_resume(settings) -> None:
         uploaded = st.file_uploader(
             "Resume file", type=[e.lstrip(".") for e in sorted(RESUME_EXTS)], key="resume_upload",
             help="LaTeX (.tex), plain text (.txt), Markdown (.md) or PDF, up to 2 MB. Uploading a new "
-                 "version replaces the one in use and keeps the skills you added by hand.")
+                 "version replaces the one in use, keeps the skills you added by hand and scores your "
+                 "stored jobs against it.")
         if uploaded is not None:
             fingerprint = (uploaded.name, uploaded.size)
             if st.session_state.get("resume_fingerprint") != fingerprint:
@@ -241,12 +242,18 @@ def tab_resume(settings) -> None:
                     resume = repo().get_resume(resume_id) or dict(parsed, id=resume_id)
                     st.session_state["resume"] = resume
                     st.session_state["resume_fingerprint"] = fingerprint
-                    st.session_state["skills_changed"] = True
+                    found = f"{len(c.as_list(g(resume, 'skills', default=[])))} skills found"
+                    scored = _rescore_after_upload(resume, settings)
+                    if scored:
+                        st.session_state.pop("skills_changed", None)
+                        tail = f"{scored} stored jobs were scored against it, so **Matches** is up to date."
+                    elif scored is None:
+                        st.session_state["skills_changed"] = True
+                        tail = "Scoring the stored jobs failed. Press **Score stored jobs** on the Matches tab."
+                    else:
+                        tail = "Next, open **Find jobs** to collect postings."
                     st.session_state["resume_notice"] = (
-                        f"Resume {'updated' if has_resume else 'saved'}: "
-                        f"{len(c.as_list(g(resume, 'skills', default=[])))} skills found. "
-                        + ("Press **Score stored jobs** on the Matches tab to refresh your scores."
-                           if has_resume else "Next, open **Find jobs**."))
+                        f"Resume {'updated' if has_resume else 'saved'}: {found}. {tail}")
                     st.rerun()  # so the sidebar and the numbers above pick up the new resume
         notice = st.session_state.pop("resume_notice", None)
         if notice:
@@ -258,6 +265,35 @@ def tab_resume(settings) -> None:
                       "Upload your resume above. It is read on this machine and never sent anywhere.")
         return
     _render_resume(resume)
+
+
+def _home_country(settings) -> str:
+    """The country picked on the Matches tab, or the configured one before it was opened."""
+    picked = st.session_state.get("home_country")
+    if picked is not None:
+        return "" if picked == NO_COUNTRY else str(picked)
+    try:
+        return load("matching.location", "normalize_country")(str(getattr(settings, "candidate_country", "") or ""))
+    except Exception:
+        return ""
+
+
+def _rescore_after_upload(resume: dict, settings) -> int | None:
+    """Score every stored job against a newly uploaded resume. Returns how many were scored,
+    0 when there are no jobs yet, or None when scoring failed (the upload itself is kept)."""
+    if g(resume, "id") is None or not int(db_counts().get("Jobs", 0) or 0):
+        return 0
+    try:
+        with st.status("Scoring your stored jobs against this resume...", expanded=True) as box:
+            bar = st.progress(0.0, text="Reading stored jobs")
+            n = _score_and_save(resume, _home_country(settings),
+                                tuple(getattr(settings, "candidate_cities", ()) or ()),
+                                step=lambda fraction, text: bar.progress(min(1.0, fraction), text=text))
+            box.update(label=f"Scored {n} jobs", state="complete", expanded=False)
+        return n
+    except Exception:
+        c.log.exception("scoring after upload failed")
+        return None
 
 
 def _store_upload(settings, filename: str, data: bytes) -> str:
@@ -446,6 +482,54 @@ def tab_scrape(settings) -> None:
                     st.markdown(c.job_card_html(job, tags=_posting_skills(str(job.get("description") or "")),
                                                 link=True), unsafe_allow_html=True)
             _show_more("stored_jobs", len(jobs))
+            _housekeeping(resume=current_resume())
+
+
+def _housekeeping(resume: dict | None) -> None:
+    """Back up stored jobs and matches as CSV, and delete postings that are too old to apply to."""
+    hk = load("db.housekeeping")
+    notice = st.session_state.pop("stale_notice", None)
+    if notice:
+        st.success(notice)
+    with st.expander("Back up or clean up stored jobs"):
+        st.markdown("**Back up**")
+        st.caption("Download your stored jobs and scores as spreadsheets (CSV). "
+                   "`python scripts/housekeeping.py backup` also copies the whole database.")
+        if st.button("Prepare CSV files", key="backup_prepare"):
+            with friendly_errors("prepare the backup"):
+                st.session_state["backup_files"] = (hk.jobs_csv(), hk.matches_csv(g(resume or {}, "id")))
+        files = st.session_state.get("backup_files")
+        if files:
+            day = load("db.database", "utcnow")().strftime("%Y-%m-%d")
+            left, right = st.columns(2)
+            left.download_button("Download jobs.csv", files[0], file_name=f"jobhunt-jobs-{day}.csv",
+                                 mime="text/csv", use_container_width=True, key="backup_jobs")
+            right.download_button("Download matches.csv", files[1], file_name=f"jobhunt-matches-{day}.csv",
+                                  mime="text/csv", use_container_width=True, key="backup_matches",
+                                  help="Scores and statuses for the resume in use.")
+
+        st.divider()
+        st.markdown("**Clean up**")
+        days = st.number_input("Delete jobs older than (days)", min_value=7, max_value=365,
+                               value=hk.DEFAULT_STALE_DAYS, step=1, key="stale_days",
+                               help="Age is counted from the posting date, or from when the job was "
+                                    "collected if the posting has no date.")
+        summary = hk.stale_summary(int(days))
+        kept = (f" {summary['kept']} older jobs stay because you saved, applied to or wrote for them."
+                if summary["kept"] else "")
+        if not summary["stale"]:
+            st.caption(f"No jobs are older than {int(days)} days.{kept}")
+            return
+        st.caption(f"{summary['stale']} jobs are older than {int(days)} days and would be deleted with "
+                   f"their scores.{kept} This cannot be undone, so back up first if you may want them.")
+        sure = st.checkbox(f"Yes, delete {summary['stale']} old jobs", key="stale_confirm")
+        if st.button(f"Delete {summary['stale']} old jobs", disabled=not sure, key="stale_delete"):
+            with friendly_errors("delete old jobs"):
+                n = hk.delete_stale_jobs(int(days))
+                st.session_state.pop("stale_confirm", None)
+                st.session_state.pop("backup_files", None)
+                st.session_state["stale_notice"] = f"Deleted {n} jobs older than {int(days)} days."
+                st.rerun()
 
 
 PAGE = 10

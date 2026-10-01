@@ -473,3 +473,29 @@ def test_missing_library_says_how_to_start_the_app(monkeypatch):
     monkeypatch.setattr(importlib, "import_module", missing_project_module)
     with pytest.raises(c.FeatureUnavailable, match="is not available yet"):
         c.load("generator.cover_letter")
+
+
+def test_backup_and_clean_up_panel(ui_env):
+    pytest.importorskip("alembic")
+    from datetime import datetime
+
+    from db import repository as repo
+
+    rid = _seed()
+    repo.upsert_jobs([{**JOB, "title": "Ancient role", "url": "https://remoteok.com/remote-jobs/old",
+                       "posted_date": datetime(2020, 1, 1)}])
+    at = _run()
+    _assert_clean(at)
+    assert any(e.label == "Back up or clean up stored jobs" for e in at.expander)
+    at.button(key="backup_prepare").click().run()
+    _assert_clean(at)
+    labels = [el.proto.label for el in at.get("download_button")]
+    assert {"Download jobs.csv", "Download matches.csv"} <= set(labels)
+
+    assert at.button(key="stale_delete").disabled  # nothing happens until the box is ticked
+    at.checkbox(key="stale_confirm").check().run()
+    at.button(key="stale_delete").click().run()
+    _assert_clean(at)
+    assert [j["title"] for j in repo.list_jobs()] == ["Python Developer"]
+    assert len(repo.list_matches(rid)) == 1
+    assert any("Deleted 1 jobs older than 30 days" in s.value for s in at.success)
