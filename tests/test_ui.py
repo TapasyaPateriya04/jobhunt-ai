@@ -9,7 +9,7 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 APP = str(Path(__file__).resolve().parent.parent / "ui" / "app.py")
-TAB_LABELS = ["Resume", "Find jobs", "Matches", "Documents"]
+TAB_LABELS = ["Resume", "Find jobs", "Matches", "Applications", "Documents"]
 
 RESUME = {
     "raw_text": "Jane Doe. Python developer with 5 years experience in Django, SQL, Docker and AWS.",
@@ -309,3 +309,193 @@ def test_score_breakdown_and_summary_strip(ui_env):
     assert "jh-bars" in html and "Skills and keywords" in html and "Experience fit" in html
     assert 'class="jh-strip"' in html and "<b>1</b> of 1 jobs" in html
     assert "jh-score hi" in html  # 72.5 is a strong match
+
+
+def test_overview_names_the_next_step(ui_env):
+    at = _run()
+    assert any("Next step:" in m.value and "Upload your resume" in m.value for m in at.markdown)
+    rid = _seed(total=72.5)
+    at = _run()
+    _assert_clean(at)
+    text = " ".join(m.value for m in at.markdown)
+    assert "<b>1</b><span>strong matches</span>" in text and "press <b>Save</b>" in text
+    # Saving a job moves the next step on to writing for it.
+    from db import repository as repo
+
+    at.button(key=f"save_{repo.list_matches(rid)[0]['id']}").click().run()
+    assert any("You have 1 saved job." in m.value for m in at.markdown)
+
+
+def test_score_is_labelled_in_words(ui_env):
+    from ui import components as c
+
+    assert [c.score_label(v) for v in (72, 40, 10, None)] == [
+        "Strong match", "Possible match", "Weak match", "Not scored"]
+    card = c.job_card_html({"title": "T", "company": "C"}, score=40)
+    assert "jh-score mid" in card and "Possible match" in card and 'aria-label="Match score 40 out of 100' in card
+
+
+def test_applications_tab_tracks_saved_jobs(ui_env):
+    from db import repository as repo
+
+    rid = _seed()
+    mid = repo.list_matches(rid)[0]["id"]
+    at = _run()
+    assert any("No applications tracked yet" in m.value for m in at.markdown)
+    at.button(key=f"save_{mid}").click().run()
+    _assert_clean(at)
+    assert not any("No applications tracked yet" in m.value for m in at.markdown)
+    assert at.selectbox(key=f"track_{mid}").value == "saved"
+    assert any("<b>1</b><span>saved, to apply to</span>" in m.value for m in at.markdown)
+
+    # Changing the status there is stored and the card on the Matches tab follows.
+    at.selectbox(key=f"track_{mid}").select("applied").run()
+    _assert_clean(at)
+    assert repo.list_matches(rid)[0]["status"] == "applied"
+    assert at.selectbox(key=f"status_{mid}").value == "applied"
+    assert any("jh-badge applied" in m.value for m in at.markdown)
+
+    # "Write documents" selects the job on the Documents tab.
+    at.button(key=f"write_{mid}").click().run()
+    _assert_clean(at)
+    assert at.selectbox(key="doc_job").value == mid
+
+
+def test_search_and_reset_filters(ui_env):
+    _seed()
+    at = _run()
+    search = next(t for t in at.text_input if t.label == "Search")
+    search.input("initech django").run()
+    _assert_clean(at)
+    assert any("<b>1</b> of 1 jobs" in m.value for m in at.markdown)
+    next(t for t in at.text_input if t.label == "Search").input("cobol").run()
+    assert any("No jobs pass these filters" in m.value for m in at.markdown)
+    at.button(key="filter_reset_btn").click().run()
+    _assert_clean(at)
+    assert next(t for t in at.text_input if t.label == "Search").value == ""
+    assert any("<b>1</b> of 1 jobs" in m.value for m in at.markdown)
+
+
+def test_job_description_is_formatted_and_escaped(ui_env):
+    from db import repository as repo
+    from ui import components as c
+
+    html = c.description_html("About us\n\nWe build <b>things</b>.\n- Python\n* Django\nRequirements:\n1. SQL")
+    assert "<h6>About us</h6>" in html and "<p>We build &lt;b&gt;things&lt;/b&gt;.</p>" in html
+    assert "<ul><li>Python</li><li>Django</li></ul>" in html and "<h6>Requirements</h6><ul><li>SQL</li></ul>" in html
+    # A sentence broken across lines stays one paragraph instead of becoming a heading.
+    assert c.description_html("We migrate to our\nCelonis Platform\nSaaS solution.") == (
+        '<div class="jh-jd" tabindex="0" role="region" aria-label="Full job description">'
+        "<p>We migrate to our Celonis Platform SaaS solution.</p></div>")
+
+    rid = _seed()
+    mid = repo.list_matches(rid)[0]["id"]
+    at = _run()
+    at.checkbox(key=f"jd_{mid}").check().run()
+    _assert_clean(at)
+    assert any('class="jh-jd"' in m.value and "PostgreSQL" in m.value for m in at.markdown)
+
+
+def test_scoring_reports_progress(ui_env):
+    pytest.importorskip("matching.confidence_score")
+    from db import repository as repo
+
+    repo.save_resume(RESUME, "resume.txt")
+    repo.upsert_jobs([JOB])
+    at = _run()
+    next(b for b in at.button if b.label == "Score stored jobs").click().run()
+    _assert_clean(at)
+    assert [s.label for s in at.status] == ["Scored 1 jobs"] and at.status[0].state == "complete"
+    assert any("Scored 1 jobs against your resume" in s.value for s in at.success)
+
+
+def test_export_to_word_and_pdf():
+    pytest.importorskip("docx")
+    pytest.importorskip("fpdf")
+    from ui import export
+
+    draft = "Dear Hiring Manager,\n\nI\u2019m applying \u2014 **gladly**.\n\n## Skills\n- Java\n- Spring Boot"
+    assert [kind for kind, _ in export._blocks(draft)] == [
+        "para", "blank", "para", "blank", "heading", "bullet", "bullet"]
+    assert export.to_docx(draft, "Cover letter")[:2] == b"PK"
+    assert export.to_pdf(draft, "Cover letter")[:5] == b"%PDF-"
+    assert export._latin1("I\u2019m \u2014 \u4e2d") == "I'm - ?"
+
+
+def test_draft_can_be_downloaded_in_three_formats(ui_env, monkeypatch):
+    pytest.importorskip("docx")
+    pytest.importorskip("fpdf")
+    from db import repository as repo
+
+    rid = _seed()
+    mid = repo.list_matches(rid)[0]["id"]
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.session_state[f"draft_{mid}_cover_letter"] = "Dear team,\n\nHello."
+    at.run()
+    _assert_clean(at)
+    assert any(t.label == "Edit before saving" for t in at.text_area)
+    assert any("3 words" in cap.value for cap in at.caption)
+    labels = [el.proto.label for el in at.get("download_button")]
+    assert labels == ["Download .txt", "Download .docx", "Download .pdf"]
+
+
+def test_charts_summarise_the_jobs_shown(ui_env):
+    from ui import components as c
+
+    bars = c.count_bars_html([("A <b>", 4), ("B", 1)], note="n")
+    assert "A &lt;b&gt;" in bars and "width:100%" in bars and "width:25%" in bars and "<b>1</b>" in bars
+    _seed(total=72.5)
+    at = _run()
+    _assert_clean(at)
+    assert any(e.label.startswith("Charts for the jobs shown") for e in at.expander)
+    charts = " ".join(m.value for m in at.markdown if "jh-counts" in m.value and "<style>" not in m.value)
+    assert "<label>Strong (50+)</label>" in charts and "<label>RemoteOK</label>" in charts
+    assert "PostgreSQL (missing)" in charts
+
+
+def test_missing_library_says_how_to_start_the_app(monkeypatch):
+    import importlib
+
+    from ui import components as c
+
+    def fake_import(name):
+        raise ModuleNotFoundError("No module named 'sqlalchemy'", name="sqlalchemy")
+
+    monkeypatch.setattr(importlib, "import_module", fake_import)
+    with pytest.raises(c.FeatureUnavailable) as info:
+        c.load("db.database", "init_db")
+    assert "`sqlalchemy` library is not installed" in str(info.value)
+    assert "-m streamlit run ui/app.py" in str(info.value)
+
+    def missing_project_module(name):
+        raise ModuleNotFoundError(f"No module named '{name}'", name=name)
+
+    monkeypatch.setattr(importlib, "import_module", missing_project_module)
+    with pytest.raises(c.FeatureUnavailable, match="is not available yet"):
+        c.load("generator.cover_letter")
+
+
+def test_backup_and_clean_up_panel(ui_env):
+    pytest.importorskip("alembic")
+    from datetime import datetime
+
+    from db import repository as repo
+
+    rid = _seed()
+    repo.upsert_jobs([{**JOB, "title": "Ancient role", "url": "https://remoteok.com/remote-jobs/old",
+                       "posted_date": datetime(2020, 1, 1)}])
+    at = _run()
+    _assert_clean(at)
+    assert any(e.label == "Back up or clean up stored jobs" for e in at.expander)
+    at.button(key="backup_prepare").click().run()
+    _assert_clean(at)
+    labels = [el.proto.label for el in at.get("download_button")]
+    assert {"Download jobs.csv", "Download matches.csv"} <= set(labels)
+
+    assert at.button(key="stale_delete").disabled  # nothing happens until the box is ticked
+    at.checkbox(key="stale_confirm").check().run()
+    at.button(key="stale_delete").click().run()
+    _assert_clean(at)
+    assert [j["title"] for j in repo.list_jobs()] == ["Python Developer"]
+    assert len(repo.list_matches(rid)) == 1
+    assert any("Deleted 1 jobs older than 30 days" in s.value for s in at.success)

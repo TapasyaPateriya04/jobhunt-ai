@@ -37,7 +37,7 @@ playwright install chromium                        # only for the experimental I
 python -m spacy download en_core_web_sm            # better skill hints
 ollama pull mistral                                # local LLM (https://ollama.ai)
 
-python scripts/init_db.py                          # creates jobhunt.db
+python scripts/init_db.py                          # creates or upgrades jobhunt.db
 streamlit run ui/app.py                            # open http://localhost:8501
 ```
 
@@ -57,7 +57,7 @@ python pipeline.py --resume my_resume.tex --keywords "Python Developer" --locati
 ```
 config.py        settings from .env
 security/        input sanitizing, URL allowlist, robots.txt, rate limiting, prompt fencing, log redaction
-db/              SQLAlchemy models (Resume, Job, Match, Document) and repository helpers
+db/              SQLAlchemy models, repository helpers, Alembic migrations, housekeeping
 scraper/         source scrapers + normalizer + scrape_jobs() service
 parser/          resume parser and job description analyzer
 matching/        ATS scorer, semantic matcher, confidence score
@@ -92,19 +92,51 @@ title or mentioned at least twice in the description (see `scraper/relevance.py`
 
 ## Using the app
 
-- **Resume tab**: upload a resume, or update it by uploading a newer file (skills you added by hand carry over). Pick between stored resumes in the **Resume in use** dropdown. Type skills
-  your file doesn't mention into **Add a skill** (several at once, separated by commas); they are
-  saved with the resume and count in matching.
-- **Matches tab**: sliders set the minimum confidence and the most years a posting may ask for;
-  checkboxes hide jobs you cannot take; dropdowns choose your country, a source, a status and how
-  to sort. Each job is a card with its match score, the years it asks for, whether you can take
-  it, and the skills you have and lack. **Save** and **Hide** work from the card; hidden jobs
-  come back under Status: hidden. The card's expander holds the scores, must-have and
-  nice-to-have skills and the full posting, and its **Status** dropdown is your application tracker.
-- **Skills worth adding** (Matches tab): jobs that are only 1 to 3 must-have skills short of a
-  full match, with the skills that come up most. If you already have one, add it from the
-  dropdown. Buzzwords such as "AI" and "SaaS" are not counted as missing skills.
-- After scraping, adding skills or changing your country, click **Score stored jobs**.
+Start it with the project's environment (`.venv\Scripts\python -m streamlit run ui/app.py` on
+Windows); a different Python will be missing libraries. The line above the tabs shows your
+numbers and the next step to take.
+
+- **Resume tab**: upload a resume, or a newer version of it (skills you added by hand carry over,
+  and your stored jobs are scored against it straight away). Type skills your file doesn't
+  mention into **Add a skill**. Switch between stored resumes in the sidebar.
+- **Find jobs tab**: collect postings from the sources you pick. At the bottom, **Back up or clean
+  up stored jobs** downloads jobs and scores as CSV and deletes postings older than a number of
+  days you choose (30 by default). Jobs you saved, applied to or wrote a document for are kept.
+- **Matches tab**: search by title, company, location or skill; sliders, checkboxes and dropdowns
+  narrow the list; **Reset filters** clears them. Each card shows the score with its band
+  (strong 50+, possible 35 to 49, weak), the years asked, whether you can take the job and the
+  skills you have (✓) and lack (✕). **Save** and **Hide** work from the card; the expander holds
+  the score breakdown, must-have skills and the full posting. **Skills worth adding** lists jobs
+  only 1 to 3 skills short. After scraping, adding skills or changing your country, click
+  **Score stored jobs**.
+- **Applications tab**: every job you saved, applied to or were rejected for, with its status.
+  **Write documents** picks the job on the Documents tab.
+- **Documents tab**: draft a cover letter or resume suggestions with the local model (or Gemini),
+  edit the draft and download it as .txt, .docx or .pdf.
+
+## Database
+
+The schema is managed with Alembic (`db/migrations`). The app applies migrations when it starts,
+and databases made before migrations existed are upgraded in place without losing data. To change
+the schema, edit the models in `db/database.py`, then:
+
+```bash
+alembic revision --autogenerate -m "describe the change"   # review the file it writes
+alembic upgrade head                                       # or just restart the app
+```
+
+`tests/test_housekeeping.py` fails if the models and the migrations drift apart.
+
+Housekeeping from the terminal:
+
+```bash
+python scripts/housekeeping.py status               # schema version and how many jobs are stale
+python scripts/housekeeping.py backup               # CSVs + a copy of jobhunt.db in <docs_dir>/backups
+python scripts/housekeeping.py clean --days 30      # report only; add --yes to delete
+```
+
+SQLite is enough for one person's job search. The code only uses portable SQLAlchemy, so moving
+to PostgreSQL later means changing `DATABASE_URL` and running `alembic upgrade head`.
 
 ## Matching quality
 
