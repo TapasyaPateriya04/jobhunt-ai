@@ -5,6 +5,7 @@ Run with:  streamlit run ui/app.py
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from ui import components as c  # noqa: E402
 from ui.components import FeatureUnavailable, friendly_errors, g, load  # noqa: E402
 
 RESUME_EXTS = {".tex", ".txt", ".md", ".pdf"}
-TABS = ["Resume", "Find jobs", "Matches", "Documents"]
+TABS = ["Resume", "Find jobs", "Matches", "Applications", "Documents"]
 
 
 # --------------------------------------------------------------------------- setup
@@ -54,6 +55,9 @@ def bootstrap(database_url: str) -> str:
         problems.append(f"logging setup skipped ({type(exc).__name__})")
     try:
         load("db.database", "init_db")()
+    except FeatureUnavailable as exc:
+        c.log.exception("init_db failed")
+        return f"Database could not be initialised: {exc}"
     except Exception as exc:
         c.log.exception("init_db failed")
         return f"Database could not be initialised ({type(exc).__name__}). Check DATABASE_URL."
@@ -89,70 +93,135 @@ def current_resume() -> dict | None:
 
 # --------------------------------------------------------------------------- sidebar
 
-def render_sidebar(settings) -> None:
-    with st.sidebar:
-        st.header("System status")
-        st.caption("LLM backends")
-        use_ollama = bool(getattr(settings, "use_ollama", True))
-        base = str(getattr(settings, "ollama_base_url", "http://localhost:11434"))
-        model = getattr(settings, "ollama_model", "mistral")
-        if use_ollama:
-            c.status_row("Ollama", c.ollama_reachable(base), f"reachable ({model})",
-                         "not reachable - run `ollama serve`")
-        else:
-            c.status_row("Ollama", False, "", "disabled (USE_OLLAMA=false)")
-        has_key = bool(getattr(settings, "gemini_api_key", None))
-        c.status_row("Gemini", has_key, "API key configured", "no GEMINI_API_KEY set")
-
-        st.divider()
-        st.caption("Storage")
-        st.markdown(f"**Database:** `{c.db_location(str(settings.database_url))}`")
-        st.markdown(f"**Documents:** `{getattr(settings, 'docs_dir', '~/jobhunt_docs')}`")
-        counts = db_counts()
-        if counts:
-            cols = st.columns(2)
-            for i, (k, v) in enumerate(counts.items()):
-                cols[i % 2].metric(k, v)
-        st.divider()
-        st.caption("Everything runs locally. Your data never leaves this machine "
-                   "unless you enable Gemini.")
-
-
-# --------------------------------------------------------------------------- tab 1
-
 def _resume_name(r: dict) -> str:
-    name = Path(str(r.get("file_path") or "resume")).name
     when = r.get("created_at")
     day = when.strftime("%d %b %Y") if hasattr(when, "strftime") else ""
-    return f"{name}  ({r.get('skill_count', 0)} skills{', ' + day if day else ''})"
+    return f"{_file_name(r)}  ({r.get('skill_count', 0)} skills{', ' + day if day else ''})"
+
+
+def _file_name(resume: dict) -> str:
+    """The uploaded file's name without the random prefix added when it was stored."""
+    name = Path(str(g(resume, "file_path", default="") or "resume")).name
+    return re.sub(r"^[0-9a-f]{8}-", "", name)
+
+
+def _on_resume_pick() -> None:
+    try:
+        st.session_state["resume"] = repo().get_resume(st.session_state["resume_picker"])
+    except Exception:
+        c.log.exception("get_resume failed")
 
 
 def _pick_resume() -> None:
-    """Dropdown to switch between stored resumes (shown once there is more than one)."""
+    """Which resume every tab works from. A dropdown once more than one is stored."""
+    current = current_resume()
+    if not current:
+        st.caption("No resume yet. Upload one on the Resume tab.")
+        return
     try:
         resumes = repo().list_resumes()
     except Exception:
         c.log.exception("list_resumes failed")
-        return
-    if len(resumes) < 2:
-        return
+        resumes = []
     by_id = {r["id"]: r for r in resumes}
-    current = g(current_resume() or {}, "id")
-    ids = list(by_id)
-    chosen = st.selectbox("Resume in use", ids, index=ids.index(current) if current in ids else 0,
-                          format_func=lambda i: _resume_name(by_id[i]), key="resume_picker",
-                          help="Matches, skill suggestions and documents use this resume.")
-    if chosen != current:
-        st.session_state["resume"] = repo().get_resume(chosen)
-        st.rerun()
+    if len(by_id) < 2 or g(current, "id") not in by_id:
+        st.markdown(f"**{_file_name(current)}**")
+        st.caption(f"{len(c.as_list(g(current, 'skills', default=[])))} skills found")
+        return
+    st.session_state["resume_picker"] = current["id"]  # the dropdown always shows the resume in use
+    st.selectbox("Resume in use", list(by_id), format_func=lambda i: _resume_name(by_id[i]),
+                 key="resume_picker", on_change=_on_resume_pick,
+                 help="Matches, applications, skill suggestions and documents all use this resume.")
 
+
+def render_sidebar(settings) -> None:
+    with st.sidebar:
+        st.header("Your resume")
+        _pick_resume()
+
+        st.divider()
+        st.header("Language model")
+        st.caption("Writes cover letters and resume suggestions.")
+        use_ollama = bool(getattr(settings, "use_ollama", True))
+        base = str(getattr(settings, "ollama_base_url", "http://localhost:11434"))
+        model = getattr(settings, "ollama_model", "mistral")
+        if use_ollama:
+            c.status_row("Ollama", c.ollama_reachable(base), f"ready ({model})",
+                         "not running. Start it with `ollama serve`")
+        else:
+            c.status_row("Ollama", False, "", "turned off (USE_OLLAMA=false)")
+        has_key = bool(getattr(settings, "gemini_api_key", None))
+        c.status_row("Gemini", has_key, "API key configured", "not set up (no GEMINI_API_KEY)")
+
+        st.divider()
+        st.header("Storage")
+        st.markdown(f"**Database:** `{c.db_location(str(settings.database_url))}`")
+        st.markdown(f"**Documents:** `{getattr(settings, 'docs_dir', '~/jobhunt_docs')}`")
+        st.caption("Everything runs on this machine. Your data only leaves it if you enable Gemini.")
+
+
+# --------------------------------------------------------------------------- overview
+
+def _matches(resume: dict | None, limit: int = 500) -> list[dict]:
+    if not resume or g(resume, "id") is None:
+        return []
+    try:
+        return repo().list_matches(resume["id"], limit=limit)
+    except Exception:
+        c.log.exception("list_matches failed")
+        return []
+
+
+def _score_of(m: dict) -> float:
+    try:
+        return float(g(m, "confidence_score", "total", default=0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _count(matches: list[dict], status: str) -> int:
+    return sum(1 for m in matches if g(m, "status", default="new") == status)
+
+
+def next_step(has_resume: bool, jobs: int, matches: list[dict]) -> str:
+    """The one thing to do next, in the order resume, collect, score, shortlist, apply."""
+    if not has_resume:
+        return "Upload your resume on the **Resume** tab."
+    if not jobs:
+        return "Collect some postings on the **Find jobs** tab."
+    if not matches:
+        return "Open **Matches** and press **Score stored jobs** to rank the postings against your resume."
+    saved, applied = _count(matches, "saved"), _count(matches, "applied")
+    if saved:
+        return (f"You have {saved} saved job{'s' if saved != 1 else ''}. Draft a cover letter on the "
+                "**Documents** tab, then mark each one applied under **Applications**.")
+    if applied:
+        return "Save more jobs on the **Matches** tab and update the ones you hear back from."
+    return "Read through **Matches** and press **Save** on the jobs worth applying to."
+
+
+def render_overview(resume: dict | None) -> None:
+    """Headline numbers for the search so far and the next step, above the tabs."""
+    matches = _matches(resume)
+    jobs = int(db_counts().get("Jobs", 0) or 0)
+    if resume and (jobs or matches):
+        strong = sum(1 for m in matches if _score_of(m) >= 50 and g(m, "status", default="new") != "hidden")
+        cells = [(jobs, "jobs collected"), (len(matches), "scored for this resume"), (strong, "strong matches"),
+                 (_count(matches, "saved"), "saved"), (_count(matches, "applied"), "applied")]
+        st.markdown('<div class="jh-stat">' + "".join(f"<div><b>{n}</b><span>{label}</span></div>"
+                                                      for n, label in cells) + "</div>", unsafe_allow_html=True)
+    # The line sits inside a styled block, so its Markdown bold becomes <b> by hand.
+    step = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", c.html.escape(next_step(bool(resume), jobs, matches)))
+    st.markdown(f'<div class="jh-next"><b>Next step:</b> {step}</div>', unsafe_allow_html=True)
+
+
+# --------------------------------------------------------------------------- tab 1
 
 def tab_resume(settings) -> None:
     st.subheader("Your resume")
     has_resume = bool(current_resume())
     with st.container(border=True):
-        c.panel_title("Update your resume" if has_resume else "Upload your resume")
-        _pick_resume()
+        c.panel_title("Upload a newer version" if has_resume else "Upload your resume")
         uploaded = st.file_uploader(
             "Resume file", type=[e.lstrip(".") for e in sorted(RESUME_EXTS)], key="resume_upload",
             help="LaTeX (.tex), plain text (.txt), Markdown (.md) or PDF, up to 2 MB. Uploading a new "
@@ -173,9 +242,15 @@ def tab_resume(settings) -> None:
                     st.session_state["resume"] = resume
                     st.session_state["resume_fingerprint"] = fingerprint
                     st.session_state["skills_changed"] = True
-                    st.success(f"Resume {'updated' if has_resume else 'saved'}: "
-                               f"{len(c.as_list(g(resume, 'skills', default=[])))} skills found. "
-                               "Next, open **Find jobs**, then score them under **Matches**.")
+                    st.session_state["resume_notice"] = (
+                        f"Resume {'updated' if has_resume else 'saved'}: "
+                        f"{len(c.as_list(g(resume, 'skills', default=[])))} skills found. "
+                        + ("Press **Score stored jobs** on the Matches tab to refresh your scores."
+                           if has_resume else "Next, open **Find jobs**."))
+                    st.rerun()  # so the sidebar and the numbers above pick up the new resume
+        notice = st.session_state.pop("resume_notice", None)
+        if notice:
+            st.success(notice)
 
     resume = current_resume()
     if not resume:
@@ -273,7 +348,7 @@ def _render_resume(resume: dict) -> None:
     education = g(resume, "education", default="") or ""
     summary = g(resume, "summary", default="") or ""
 
-    name = Path(str(g(resume, "file_path", default="") or "resume")).name
+    name = _file_name(resume)
     st.markdown(f'<div class="jh-stat"><div><b>{len(skills)}</b><span>skills</span></div>'
                 f'<div><b>{len(experience)}</b><span>experience entries</span></div>'
                 f'<div><b>{c.html.escape(name[:40])}</b><span>file in use</span></div></div>',
@@ -298,12 +373,13 @@ def _render_resume(resume: dict) -> None:
     with right:
         st.markdown("#### Education")
         if education:
-            st.write(education if isinstance(education, str) else c.as_list(education))
+            for line in ([education] if isinstance(education, str) else c.as_list(education)):
+                st.write(line)
         else:
             st.caption("No education section detected.")
     raw = g(resume, "raw_text", default="")
     if raw:
-        with st.expander("Raw extracted text"):
+        with st.expander("Text read from your file"):
             st.text(raw[:10000])
 
 
@@ -316,11 +392,17 @@ def tab_scrape(settings) -> None:
     cap = int(getattr(settings, "max_jobs_per_session", 50) or 50)
     with st.form("scrape_form"):
         col1, col2 = st.columns(2)
-        keywords = col1.text_input("Job keywords", "Python Developer")
-        location = col2.text_input("Location", "Remote")
-        max_jobs = st.slider("Max jobs to scrape", 5, max(5, min(50, cap)), min(20, cap))
-        sources = st.multiselect("Sources", options=list(c.SOURCES), default=c.DEFAULT_SOURCES,
-                                 format_func=lambda s: c.SOURCES[s])
+        keywords = col1.text_input("Job keywords", "Python Developer", key="scrape_keywords",
+                                   placeholder="e.g. Java Developer, Backend Engineer")
+        location = col2.text_input("Location", "Remote", key="scrape_location",
+                                   placeholder="e.g. Remote, or Bangalore, India")
+        max_jobs = st.slider("Max jobs to scrape", 5, max(5, min(50, cap)), min(20, cap), key="scrape_max")
+        sources = st.multiselect(
+            "Sources", options=list(c.SOURCES), default=c.DEFAULT_SOURCES, format_func=c.source_name,
+            key="scrape_sources",
+            help="RemoteOK, Hacker News, The Muse and Arbeitnow are free public APIs. Greenhouse and Lever "
+                 "read the company boards named in .env. Indeed, LinkedIn and Naukri are experimental and "
+                 "usually return nothing.")
         submitted = st.form_submit_button("Find jobs", type="primary")
 
     if any(s in sources for s in ("indeed", "linkedin", "naukri")):
@@ -333,13 +415,23 @@ def tab_scrape(settings) -> None:
         elif not sources:
             st.warning("Pick at least one source.")
         else:
-            with friendly_errors("scrape jobs"), st.spinner("Scraping... (being polite, this can take a while)"):
-                jobs = _scrape(keywords.strip(), location.strip(), int(max_jobs), list(sources))
-                new = repo().upsert_jobs(jobs) if jobs else 0
+            names = ", ".join(c.source_name(x) for x in sources)
+            with friendly_errors("scrape jobs"):
+                with st.status(f"Collecting jobs from {names}...", expanded=True) as box:
+                    st.write("Requests are spaced out to be polite to each site, so this can take a minute.")
+                    jobs = _scrape(keywords.strip(), location.strip(), int(max_jobs), list(sources))
+                    new = repo().upsert_jobs(jobs) if jobs else 0
+                    box.update(label=f"Collected {len(jobs)} jobs" if jobs else "No jobs found",
+                               state="complete" if jobs else "error", expanded=False)
                 if jobs:
-                    st.success(f"Fetched {len(jobs)} jobs, {new} new. Check the **Matches** tab.")
+                    per = {}
+                    for job in jobs:
+                        per[c.source_name(job.get("source"))] = per.get(c.source_name(job.get("source")), 0) + 1
+                    split = ", ".join(f"{n} from {name}" for name, n in sorted(per.items(), key=lambda x: -x[1]))
+                    st.success(f"Collected {len(jobs)} jobs ({split}); {new} are new. "
+                               "Open **Matches** and press **Score stored jobs** to rank them.")
                 else:
-                    st.warning("No jobs found. Try broader keywords or another source.")
+                    st.warning("No jobs found. Try broader keywords, a different location or another source.")
 
     with friendly_errors("list stored jobs"):
         jobs = repo().list_jobs(limit=50)
@@ -392,14 +484,26 @@ def _gap(resume_text: str, jd_text: str) -> dict:
     return load("matching.ats_scorer", "keyword_gap")(resume_text, jd_text, top_n=15)
 
 
-def _score_and_save(resume: dict, country: str = "", cities: tuple = ()) -> int:
+def _score_and_save(resume: dict, country: str = "", cities: tuple = (), step=None) -> int:
+    """Score every stored job and save the results. ``step(fraction, text)`` reports progress."""
+    step = step or (lambda fraction, text: None)
     r = repo()
     jobs = r.list_jobs(limit=500)
     if not jobs:
         return 0
+    step(0.05, "Loading the language model (the first run can take a minute)")
+    try:
+        embedding = load("matching.semantic_matcher", "get_model")() is not None
+    except Exception:
+        embedding = False
+    how = "meaning and keywords" if embedding else "keywords (the MiniLM model is not available)"
+    step(0.3, f"Comparing your resume with {len(jobs)} jobs by {how}")
     results = load("matching.confidence_score", "score_jobs")(resume, jobs, country=country, cities=cities)
     saved = 0
+    total = max(1, len(results or []))
     for i, res in enumerate(results or []):
+        if i % 10 == 0:
+            step(0.75 + 0.25 * i / total, f"Saving scores ({i} of {total})")
         if not isinstance(res, dict):
             continue
         if isinstance(res.get("scores"), dict):  # contract: job copies with "scores" attached
@@ -497,11 +601,17 @@ def tab_matches(resume: dict | None, settings=None) -> None:
             help="Re-scores every stored job against your resume. Do this after finding jobs, "
                  "adding skills or changing your country.")
     if rescore:
-        with friendly_errors("score jobs"), st.spinner("Scoring jobs against your resume..."):
-            n = _score_and_save(resume, country, cities)
+        with friendly_errors("score jobs"):
+            with st.status("Scoring jobs against your resume...", expanded=True) as box:
+                bar = st.progress(0.0, text="Reading stored jobs")
+                n = _score_and_save(resume, country, cities,
+                                    step=lambda fraction, text: bar.progress(min(1.0, fraction), text=text))
+                bar.progress(1.0, text="Done")
+                box.update(label=f"Scored {n} jobs" if n else "No jobs to score",
+                           state="complete" if n else "error", expanded=False)
             st.session_state.pop("skills_changed", None)
             if n:
-                st.success(f"Scored {n} jobs.")
+                st.success(f"Scored {n} jobs against your resume. The best matches are listed first.")
             else:
                 st.warning("No jobs to score yet. Collect some on the Find jobs tab first.")
     elif st.session_state.get("skills_changed"):
@@ -519,28 +629,47 @@ def tab_matches(resume: dict | None, settings=None) -> None:
         with panel:
             st.divider()
             c.panel_title("Filters")
+            # Widget keys carry a counter so "Reset filters" can put every control back to its default.
+            k = f"_{st.session_state.get('filter_reset', 0)}"
+            s1, s2 = st.columns([5, 1])
+            query = s1.text_input("Search", key=f"f_search{k}",
+                                  placeholder="Title, company, location or skill, e.g. Spring Boot Bangalore",
+                                  help="Every word you type must appear in the job's title, company, "
+                                       "location or required skills.")
+            s2.button("Reset filters", key="filter_reset_btn", use_container_width=True, on_click=_reset_filters)
             f = st.columns(2)
-            min_score = f[0].slider("Minimum confidence", 0, 100, 0, step=5)
+            min_score = f[0].slider("Minimum confidence", 0, 100, 0, step=5, key=f"f_min{k}",
+                                    help="50 and above is a strong match, 35 to 49 a possible one.")
             default_years = min(ANY_YEARS, int(my_years + 0.999) + 2)
             max_years = f[1].slider("Asks for at most (years)", 0, ANY_YEARS, default_years,
+                                    key=f"f_years{k}_{default_years}",
                                     help=f"Your resume shows about {my_years:g} years. "
                                          f"{ANY_YEARS} shows every level.")
             c1, c2 = st.columns(2)
             hide_blocked = c1.checkbox("Only jobs I can take", value=bool(country), disabled=not country,
+                                       key=f"f_blocked{k}_{int(bool(country))}",
                                        help="Hides jobs on-site in another country or restricted to "
                                             "other countries, time zones or languages. Needs your country.")
-            keep_unknown = c2.checkbox("Include jobs that state no years", value=True)
+            keep_unknown = c2.checkbox("Include jobs that state no years", value=True, key=f"f_unknown{k}")
             d = st.columns(3)
             sources = sorted({str(g(m, "source", default="") or "") for m in matches} - {""})
-            source = d[0].selectbox("Source", [ALL] + sources,
-                                    format_func=lambda s: c.SOURCES.get(s, s).split(" (")[0])
-            status = d[1].selectbox("Status", [ALL] + c.MATCH_STATUSES,
-                                    help="Use this as your application tracker.")
-            sort_by = d[2].selectbox("Sort by", SORTS)
+            source = d[0].selectbox("Source", [ALL] + sources, format_func=c.source_name, key=f"f_source{k}")
+            status = d[1].selectbox("Status", [ALL] + c.MATCH_STATUSES, format_func=c.status_name,
+                                    key=f"f_status{k}",
+                                    help="All leaves out hidden jobs. Saved, applied and rejected jobs "
+                                         "are also listed on the Applications tab.")
+            sort_by = d[2].selectbox("Sort by", SORTS, key=f"f_sort{k}")
+
+        words = str(query or "").lower().split()
 
         def keep(m: dict) -> bool:
-            if float(g(m, "confidence_score", "total", default=0) or 0) < min_score:
+            if _score_of(m) < min_score:
                 return False
+            if words:
+                hay = " ".join([str(g(m, "title", default="")), str(g(m, "company", default="")),
+                                str(g(m, "location", default="")), " ".join(m["_gap"]["required"])]).lower()
+                if not all(w in hay for w in words):
+                    return False
             if hide_blocked and m["_loc_status"] in BLOCKED_LOCATIONS:
                 return False
             if source != ALL and g(m, "source") != source:
@@ -560,17 +689,63 @@ def tab_matches(resume: dict | None, settings=None) -> None:
             parts.append(f'<span class="pill">{c.html.escape(country)} or remote</span>')
         if max_years < ANY_YEARS:
             parts.append(f'<span class="pill">up to {max_years} years</span>')
+        if words:
+            parts.append(f'<span class="pill">matching "{c.html.escape(" ".join(words)[:40])}"</span>')
         if near_count:
             parts.append(f"<span>&middot; <b>{near_count}</b> within 3 skills of a full match</span>")
         if hidden:
-            parts.append(f"<span>&middot; {hidden} hidden (Status: hidden shows them)</span>")
+            parts.append(f"<span>&middot; {hidden} hidden (Status: Hidden shows them)</span>")
         c.strip(parts)
         if not shown:
             c.empty_state("filter", "No jobs pass these filters",
-                          "Raise the years limit, lower the minimum confidence or untick a filter.")
+                          "Clear the search, raise the years limit or lower the minimum confidence. "
+                          "Reset filters puts everything back.")
             return
+        _charts(shown)
         _job_cards(shown, resume)
         _skill_suggestions(shown, resume)
+
+
+def _reset_filters() -> None:
+    st.session_state["filter_reset"] = int(st.session_state.get("filter_reset", 0)) + 1
+    st.session_state.pop("page_matches", None)
+
+
+def _charts(shown: list[dict]) -> None:
+    """Score spread, where the jobs came from and the skills they ask for, for the jobs shown."""
+    with st.expander("Charts for the jobs shown: scores, sources and skills in demand"):
+        try:
+            bands = [("Strong (50+)", 50, 101), ("Possible (35 to 49)", 35, 50), ("Weak (under 35)", 0, 35)]
+            scores = [(name, sum(1 for m in shown if lo <= _score_of(m) < hi)) for name, lo, hi in bands]
+            per_source: dict = {}
+            wanted: dict = {}
+            have = set()
+            for m in shown:
+                name = c.source_name(g(m, "source", default="")) or "Unknown"
+                per_source[name] = per_source.get(name, 0) + 1
+                have.update(m["_gap"]["matched"])
+                for skill in m["_gap"]["required"]:
+                    wanted[skill] = wanted.get(skill, 0) + 1
+            top = sorted(wanted.items(), key=lambda x: (-x[1], x[0]))[:8]
+            skills = [(f"{name}{'' if name in have else ' (missing)'}", n) for name, n in top]
+            left, mid, right = st.columns(3)
+            with left:
+                st.markdown("**Match strength**")
+                st.markdown(c.count_bars_html(scores), unsafe_allow_html=True)
+            with mid:
+                st.markdown("**Where the jobs came from**")
+                st.markdown(c.count_bars_html(sorted(per_source.items(), key=lambda x: -x[1])),
+                            unsafe_allow_html=True)
+            with right:
+                st.markdown("**Skills asked for most**")
+                if skills:
+                    st.markdown(c.count_bars_html(skills, note="Skills marked (missing) are not on your resume."),
+                                unsafe_allow_html=True)
+                else:
+                    st.caption("These postings name no skills the app recognises.")
+        except Exception:
+            c.log.exception("charts failed")
+            st.caption("Charts are unavailable right now.")
 
 
 def _skill_suggestions(shown: list[dict], resume: dict) -> None:
@@ -613,15 +788,20 @@ def _job_cards(shown: list[dict], resume: dict) -> None:
     _show_more("matches", len(shown))
 
 
+STATUS_TOASTS = {"saved": "Saved. It is now listed under Applications.", "hidden": "Hidden from your matches.",
+                 "applied": "Marked as applied.", "rejected": "Marked as rejected.",
+                 "new": "Moved back to new."}
+
+
 def _set_status(match_id: int, status: str) -> None:
     """Button callback: store a match's status and keep its Status dropdown in step."""
     try:
         repo().update_match_status(match_id, status)
         st.session_state[f"status_{match_id}"] = status
-        st.toast(f"Marked as {status}.")
+        st.toast(STATUS_TOASTS.get(status, f"Marked as {status}."))
     except Exception:
         c.log.exception("update_match_status failed")
-        st.toast("Could not update status.")
+        st.toast("Could not update the status. Details are in the log.")
 
 
 def _match_card(m: dict, resume_text: str, have: set) -> None:
@@ -659,7 +839,8 @@ def _match_detail(m: dict, resume_text: str, have: set) -> None:
     st.markdown(c.score_bars_html(
         [("Skills and keywords", g(m, "ats_score", "ats")), ("Experience fit", g(m, "experience_score", "experience")),
          ("Meaning match", g(m, "semantic_score", "semantic")), ("Freshness", g(m, "freshness_score", "freshness"))],
-        note="Weighted 35 / 30 / 25 / 10, then scaled down if you cannot take the job where it is."),
+        note="The match score is 35% skills and keywords, 30% experience fit, 25% meaning match and "
+             "10% freshness, then lowered if the job is not open to your location."),
         unsafe_allow_html=True)
     jd = g(m, "description", default="") or ""
     if jd and resume_text:
@@ -678,12 +859,14 @@ def _match_detail(m: dict, resume_text: str, have: set) -> None:
             st.caption("Keyword analysis unavailable.")
     current = g(m, "status", default="new")
     if match_id is not None:
-        st.selectbox("Status", c.MATCH_STATUSES,
+        st.selectbox("Status", c.MATCH_STATUSES, format_func=c.status_name,
                      index=c.MATCH_STATUSES.index(current) if current in c.MATCH_STATUSES else 0,
-                     key=f"status_{match_id}", on_change=_on_status_change, args=(match_id,))
+                     key=f"status_{match_id}", on_change=_on_status_change, args=(match_id,),
+                     help="Track this application. Saved, applied and rejected jobs are listed "
+                          "on the Applications tab.")
     # Expanders cannot be nested, so the posting text sits behind a checkbox.
     if jd and st.checkbox("Show the full job description", key=f"jd_{match_id}"):
-        st.text(jd[:12000])
+        st.markdown(c.description_html(jd), unsafe_allow_html=True)
 
 
 @st.cache_data(show_spinner=False, max_entries=512)
@@ -714,7 +897,7 @@ def _requirements(m: dict, match_id, have: set, jd: str) -> None:
             if not skills:
                 st.caption("None found.")
     source = "language model" if req.get("source") == "llm" else "keyword rules"
-    st.caption(f"Green = on your resume, red = missing. Split by {source}.")
+    st.caption(f"A tick means the skill is on your resume, a cross means it is missing. Split by {source}.")
     if match_id is not None and req.get("source") != "llm" and st.button(
             "Re-check with the language model", key=f"req_btn_{match_id}"):
         try:
@@ -734,48 +917,172 @@ def _on_status_change(match_id: int) -> None:
     new = st.session_state.get(f"status_{match_id}")
     try:
         repo().update_match_status(match_id, new)
-        st.toast(f"Status set to {new}.")
+        st.toast(STATUS_TOASTS.get(new, f"Status set to {new}."))
     except Exception:
         c.log.exception("update_match_status failed")
-        st.toast("Could not update status.")
+        st.toast("Could not update the status. Details are in the log.")
 
 
-# --------------------------------------------------------------------------- tab 4
+# --------------------------------------------------------------------------- tab 4: applications
+
+TRACK_VIEWS = ["all"] + c.TRACKED_STATUSES
+TRACK_HINTS = {"saved": "to apply to", "applied": "waiting to hear back", "rejected": "closed"}
+
+
+def _on_track_change(match_id: int) -> None:
+    new = st.session_state.get(f"track_{match_id}")
+    _set_status(match_id, new)
+
+
+def _write_for(match_id: int) -> None:
+    st.session_state["doc_job_pending"] = match_id
+    st.toast("Job selected. Open the Documents tab to write for it.")
+
+
+def tab_tracker(resume: dict | None) -> None:
+    st.subheader("Applications")
+    st.caption("The jobs you saved, applied to or were turned down for, in one place.")
+    if not resume or g(resume, "id") is None:
+        c.empty_state("file", "Add your resume first",
+                      "Applications are tracked per resume. Upload yours on the Resume tab.")
+        return
+    tracked = [m for m in _matches(resume) if g(m, "status", default="new") in c.TRACKED_STATUSES]
+    if not tracked:
+        c.empty_state("check", "No applications tracked yet",
+                      "Press Save on a job in the Matches tab. It will appear here, where you can "
+                      "mark it applied or rejected.")
+        return
+    counts = {status: _count(tracked, status) for status in c.TRACKED_STATUSES}
+    st.markdown('<div class="jh-stat">' + "".join(
+        f"<div><b>{counts[status]}</b><span>{c.status_name(status).lower()}, {TRACK_HINTS[status]}</span></div>"
+        for status in c.TRACKED_STATUSES) + "</div>", unsafe_allow_html=True)
+    view = st.radio("Show", TRACK_VIEWS, horizontal=True, key="track_view",
+                    format_func=lambda v: f"All ({len(tracked)})" if v == "all"
+                    else f"{c.status_name(v)} ({counts[v]})")
+    rows = [m for m in tracked if view == "all" or g(m, "status") == view]
+    if not rows:
+        c.empty_state("filter", f"Nothing marked {c.status_name(view).lower()} yet",
+                      "Pick All to see every tracked job, or change a job's status below.")
+        return
+    order = {status: i for i, status in enumerate(c.TRACKED_STATUSES)}
+    rows.sort(key=lambda m: (order.get(g(m, "status"), 9), -_score_of(m)))
+    for m in rows:
+        match_id = g(m, "id", "match_id")
+        title = str(g(m, "title", default="Untitled role"))
+        with st.container(border=True):
+            info, state, actions = st.columns([5, 2, 2])
+            details = [str(g(m, "company", default="Unknown company")), str(g(m, "location", default="") or ""),
+                       f"score {c.fmt_score(_score_of(m))} ({c.score_label(_score_of(m)).lower()})",
+                       c.time_ago(g(m, "posted_date")), c.source_name(g(m, "source", default=""))]
+            info.markdown(f"**{_md(title)}**  \n{_md(' · '.join(d for d in details if d))}")
+            st.session_state[f"track_{match_id}"] = g(m, "status")
+            state.selectbox(f"Status of {title}", c.TRACKED_STATUSES + ["new", "hidden"],
+                            format_func=lambda v: "Not tracked (back to new)" if v == "new" else c.status_name(v),
+                            key=f"track_{match_id}", on_change=_on_track_change, args=(match_id,),
+                            label_visibility="collapsed")
+            actions.button("Write documents", key=f"write_{match_id}", use_container_width=True,
+                           on_click=_write_for, args=(match_id,),
+                           help="Selects this job on the Documents tab.")
+            url = str(g(m, "url", default="") or "")
+            if url.startswith(("https://", "http://")):
+                actions.link_button("Open posting", url, use_container_width=True)
+
+
+def _md(text: str) -> str:
+    """Posting text for a Markdown line: no HTML, no accidental formatting."""
+    return re.sub(r"([\\`*_{}\[\]<>#|~$])", r"\\\1", " ".join(str(text).split()))
+
+
+# --------------------------------------------------------------------------- tab 5: documents
 
 DOC_TYPES = {"cover_letter": "Cover letter", "resume_suggestions": "Resume suggestions"}
 
 
-def tab_generate(resume: dict | None) -> None:
+def _llm_note(settings) -> tuple[bool, str]:
+    """Whether a language model is ready, and one line saying which one will write."""
+    if settings is not None and bool(getattr(settings, "use_ollama", True)) and c.ollama_reachable(
+            str(getattr(settings, "ollama_base_url", "http://localhost:11434"))):
+        return True, f"Written by Ollama ({getattr(settings, 'ollama_model', 'mistral')}) on this machine."
+    if settings is not None and getattr(settings, "gemini_api_key", None):
+        return True, "Written by Gemini. Your resume and the posting are sent to Google for this."
+    return False, "No language model is ready, so Generate cannot write yet. The sidebar shows what is missing."
+
+
+def _export_buttons(content: str, stem: str, title: str, key: str) -> None:
+    """Download the draft as text, Word or PDF."""
+    export = load("ui.export")
+    cols = st.columns(3)
+    cols[0].download_button("Download .txt", content, file_name=f"{stem}.txt", mime="text/plain",
+                            use_container_width=True, key=f"txt_{key}")
+    for col, kind, build, mime in (
+            (cols[1], "docx", export.to_docx,
+             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            (cols[2], "pdf", export.to_pdf, "application/pdf")):
+        try:
+            data = build(content, title)
+        except export.ExportUnavailable as exc:
+            col.button(f"Download .{kind}", disabled=True, use_container_width=True, key=f"{kind}_{key}",
+                       help=str(exc))
+        except Exception:
+            c.log.exception("export to %s failed", kind)
+            col.button(f"Download .{kind}", disabled=True, use_container_width=True, key=f"{kind}_{key}",
+                       help=f"This draft could not be turned into a .{kind} file. Details are in the log.")
+        else:
+            col.download_button(f"Download .{kind}", data, file_name=f"{stem}.{kind}", mime=mime,
+                                use_container_width=True, key=f"{kind}_{key}")
+
+
+def tab_generate(resume: dict | None, settings=None) -> None:
     st.subheader("Tailored documents")
+    st.caption("Draft a cover letter or resume suggestions for one job, edit the draft, then download it.")
     if not resume or g(resume, "id") is None:
         c.empty_state("file", "Add your resume first",
                       "Cover letters and resume suggestions are written from your resume.")
         return
-    try:
-        matches = repo().list_matches(resume["id"], limit=100)
-    except Exception:
-        c.log.exception("list_matches failed")
-        matches = []
+    matches = _matches(resume, limit=100)
     if not matches:
         c.empty_state("search", "No matches to write for yet",
                       "Score some jobs on the Matches tab, then come back to draft a cover letter.")
         return
 
+    # Jobs you are tracking come first, then the rest by score.
+    rank = {"saved": 0, "applied": 1}
+    matches.sort(key=lambda m: (rank.get(g(m, "status", default="new"), 2), -_score_of(m)))
     by_id = {g(m, "id", "match_id"): m for m in matches}
-    match_id = st.selectbox("Job", list(by_id), format_func=lambda i: c.match_label(by_id[i]))
-    doc_type = st.radio("Document", list(DOC_TYPES), format_func=DOC_TYPES.get, horizontal=True)
+    if st.session_state.get("doc_job") not in by_id:
+        st.session_state.pop("doc_job", None)
+    pending = st.session_state.pop("doc_job_pending", None)
+    if pending in by_id:
+        st.session_state["doc_job"] = pending
+    match_id = st.selectbox("Job", list(by_id), format_func=lambda i: c.match_label(by_id[i]), key="doc_job",
+                            help="Saved and applied jobs are listed first, then the rest by match score. "
+                                 "Type to search.")
     match = by_id[match_id]
+    facts = [str(g(match, "location", default="") or ""),
+             f"score {c.fmt_score(_score_of(match))} ({c.score_label(_score_of(match)).lower()})",
+             c.time_ago(g(match, "posted_date")), c.source_name(g(match, "source", default=""))]
+    st.caption(" · ".join(x for x in facts if x))
+    doc_type = st.radio("Document", list(DOC_TYPES), format_func=DOC_TYPES.get, horizontal=True, key="doc_type")
     draft_key = f"draft_{match_id}_{doc_type}"
 
-    if st.button("Generate", type="primary"):
+    ready, note = _llm_note(settings)
+    go, about = st.columns([1, 4])
+    generate = go.button("Generate", type="primary", use_container_width=True, key="doc_generate",
+                         help="Writes a new draft. An existing draft for this job is replaced.")
+    about.caption(note)
+    if generate:
         job = _job_for(match)
         try:
-            with st.spinner("Running the language model... (local models can take a minute)"):
+            with st.spinner(f"Writing the {DOC_TYPES[doc_type].lower()}... (local models can take a minute)"):
                 if doc_type == "cover_letter":
                     text = load("generator.cover_letter", "generate_cover_letter")(resume, job)
                 else:
                     text = load("generator.resume_optimizer", "suggest_resume_edits")(resume, job)
             st.session_state[draft_key] = text or ""
+            if text:
+                st.toast("Draft ready. Edit it below, then download or save it.")
+            else:
+                st.warning("The language model returned an empty draft. Press Generate to try again.")
         except Exception as exc:
             if _is_llm_unavailable(exc):
                 st.warning(c.LLM_HELP)
@@ -785,24 +1092,31 @@ def tab_generate(resume: dict | None) -> None:
 
     if draft_key in st.session_state:
         content = st.text_area("Edit before saving", key=draft_key, height=380)
+        st.caption(f"{len(content.split())} words. Changes you type here go into the files below.")
         safe_company = "".join(ch for ch in str(g(match, "company", default="job")) if ch.isalnum())[:40] or "job"
-        col1, col2 = st.columns(2)
-        col1.download_button("Download .txt", content, file_name=f"{doc_type}_{safe_company}.txt",
-                             mime="text/plain", use_container_width=True)
-        if col2.button("Save to documents", use_container_width=True):
+        title = f"{DOC_TYPES[doc_type]}: {g(match, 'title', default='')} at {g(match, 'company', default='')}"
+        _export_buttons(content, f"{doc_type}_{safe_company}", title, "draft")
+        if st.button("Save to documents", use_container_width=True, key="doc_save",
+                     help="Keeps a copy in your documents folder and lists it under this job."):
             with friendly_errors("save the document"):
                 path = load("generator.documents", "save_generated_doc")(match_id, doc_type, content)
-                st.success(f"Saved to `{path}`.")
+                st.success(f"Saved to `{path}`. It is also listed below.")
+    elif ready:
+        st.caption("No draft for this job yet. Press Generate to write one.")
 
     with friendly_errors("list saved documents"):
         docs = repo().list_documents(match_id)
         if docs:
             with st.expander(f"Saved documents for this job ({len(docs)})"):
                 for d in docs:
-                    st.markdown(f"- **{DOC_TYPES.get(d.get('doc_type'), d.get('doc_type'))}** - "
-                                f"`{d.get('file_path') or 'database only'}` "
-                                f"<span class='jh-muted'>{d.get('generated_at') or ''}</span>",
-                                unsafe_allow_html=True)
+                    when = d.get("generated_at")
+                    day = when.strftime("%d %b %Y, %H:%M") if hasattr(when, "strftime") else ""
+                    name, get = st.columns([3, 1])
+                    name.markdown(f"**{DOC_TYPES.get(d.get('doc_type'), d.get('doc_type'))}**  \n"
+                                  f"<span class='jh-muted'>{day}</span>", unsafe_allow_html=True)
+                    get.download_button("Download .txt", str(d.get("content") or ""),
+                                        file_name=f"{d.get('doc_type')}_{d.get('id')}.txt", mime="text/plain",
+                                        key=f"saved_doc_{d.get('id')}", use_container_width=True)
 
 
 def _job_for(match: dict) -> dict:
@@ -834,13 +1148,14 @@ def main() -> None:
     problem = bootstrap(str(settings.database_url))
 
     st.title("JobHunt AI")
-    st.caption("Find jobs you can actually get: your resume, polite job collection, ranked matches "
-               "and tailored documents, all on your own machine.")
+    st.caption("Find the jobs you can actually get, track your applications and write for each one. "
+               "Everything stays on your own machine.")
     if problem.startswith("Database"):
         st.error(problem)
     render_sidebar(settings)
+    overview = st.container()  # filled last, so it reflects what the tabs changed in this run
 
-    t1, t2, t3, t4 = st.tabs(TABS)
+    t1, t2, t3, t4, t5 = st.tabs(TABS)
     with t1:
         with friendly_errors("show the resume tab"):
             tab_resume(settings)
@@ -852,8 +1167,14 @@ def main() -> None:
         with friendly_errors("show the matches tab"):
             tab_matches(resume, settings)
     with t4:
+        with friendly_errors("show the applications tab"):
+            tab_tracker(resume)
+    with t5:
         with friendly_errors("show the documents tab"):
-            tab_generate(resume)
+            tab_generate(resume, settings)
+    with overview:
+        with friendly_errors("show the overview"):
+            render_overview(resume)
 
 
 main()

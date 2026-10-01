@@ -11,3 +11,5 @@ python-dotenv
 loguru
 rich
 pytest
+python-docx
+fpdf2
