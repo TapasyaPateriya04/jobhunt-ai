@@ -240,13 +240,41 @@ def test_fetch_boards_reads_each_configured_company(monkeypatch):
     monkeypatch.setattr(requests, "get", fake_get)
     monkeypatch.setenv("GREENHOUSE_BOARDS", "gitlab, unknown-co, gitlab, ../etc/passwd")
     monkeypatch.setenv("LEVER_COMPANIES", "palantir")
-    jobs = service.scrape_jobs("python", "Remote", 10, ["greenhouse", "lever"])
+    jobs = service.scrape_jobs("python", "Remote; London", 10, ["greenhouse", "lever"])
     assert {j["source"] for j in jobs} == {"greenhouse", "lever"}
     assert urls == [
         ("https://boards-api.greenhouse.io/v1/boards/gitlab/jobs", {"content": "true"}),
         ("https://boards-api.greenhouse.io/v1/boards/unknown-co/jobs", {"content": "true"}),
         ("https://api.lever.co/v0/postings/palantir", {"mode": "json"}),
     ]  # duplicates dropped, path-traversal slug never requested, a 404 board is skipped
+
+
+def test_board_jobs_are_filtered_by_the_search_location():
+    gh = {"jobs": [
+        {**GREENHOUSE["jobs"][0], "id": 21, "location": {"name": "Bengaluru, India"},
+         "absolute_url": "https://job-boards.greenhouse.io/x/jobs/21"},
+        {**GREENHOUSE["jobs"][0], "id": 22, "location": {"name": "San Francisco, CA"},
+         "absolute_url": "https://job-boards.greenhouse.io/x/jobs/22"},
+        {**GREENHOUSE["jobs"][0], "id": 23, "location": {"name": "Gurugram, Haryana"},
+         "absolute_url": "https://job-boards.greenhouse.io/x/jobs/23"},
+    ]}
+    pick = lambda loc: [j["location"] for j in ats_boards.parse_greenhouse(gh, "x", "python", 10, loc)]  # noqa: E731
+    assert pick("Bangalore, India") == ["Bengaluru, India"]          # "Bangalore" finds "Bengaluru"
+    assert pick("Gurgaon; Bangalore") == ["Bengaluru, India", "Gurugram, Haryana"]
+    assert pick("") == ["Bengaluru, India", "San Francisco, CA", "Gurugram, Haryana"]
+    assert pick("Indiana") == []                                      # whole words only
+    lever = [{**LEVER[0], "categories": {"location": "Toronto", "allLocations": ["Toronto", "Pune, India"]}}]
+    assert len(ats_boards.parse_lever(lever, "x", "python", 10, "India")) == 1
+
+
+def test_one_big_board_cannot_take_the_whole_quota(monkeypatch):
+    def board(name, n):
+        return {"jobs": [{**GREENHOUSE["jobs"][0], "id": i, "company_name": name,
+                          "absolute_url": f"https://job-boards.greenhouse.io/{name}/jobs/{i}"} for i in range(n)]}
+
+    monkeypatch.setattr(requests, "get", lambda url, **k: FakeResp(board("big", 30) if "/big/" in url else board("small", 3)))
+    jobs = ats_boards.fetch_greenhouse("python", max_jobs=6, boards=["big", "small"])
+    assert [j["company"] for j in jobs] == ["big", "small"] * 3
 
 
 def test_fetch_boards_without_config_returns_empty():

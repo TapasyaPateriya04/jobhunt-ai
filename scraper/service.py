@@ -44,10 +44,10 @@ def _source_fn(name: str) -> Callable[[str, str, int], list[dict]] | None:
         return lambda kw, loc, n: fetch_arbeitnow(kw, max_jobs=n)
     if name == "greenhouse":
         from scraper.ats_boards import fetch_greenhouse
-        return lambda kw, loc, n: fetch_greenhouse(kw, max_jobs=n)
+        return lambda kw, loc, n: fetch_greenhouse(kw, max_jobs=n, location=loc)
     if name == "lever":
         from scraper.ats_boards import fetch_lever
-        return lambda kw, loc, n: fetch_lever(kw, max_jobs=n)
+        return lambda kw, loc, n: fetch_lever(kw, max_jobs=n, location=loc)
     if name == "indeed":
         from scraper.indeed_scraper import scrape_indeed
         return lambda kw, loc, n: _run_async(scrape_indeed(kw, loc, n))
