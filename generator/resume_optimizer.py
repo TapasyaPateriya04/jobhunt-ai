@@ -40,5 +40,5 @@ def build_resume_prompt(resume: dict, job: dict) -> str:
     )
 
 
-def suggest_resume_edits(resume: dict, job: dict) -> str:
-    return call_llm(build_resume_prompt(resume or {}, job or {})).strip()
+def suggest_resume_edits(resume: dict, job: dict, model: str | None = None) -> str:
+    return call_llm(build_resume_prompt(resume or {}, job or {}), model=model).strip()

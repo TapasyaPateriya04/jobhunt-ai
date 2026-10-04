@@ -511,6 +511,33 @@ def ollama_reachable(base_url: str) -> bool:
         return False
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def ollama_models(base_url: str) -> list:
+    """Installed Ollama models as ``[{"name", "size"}]``, smallest first; [] when Ollama is off."""
+    try:
+        try:
+            base_url = load("security.url_guard", "validate_llm_endpoint")(base_url)
+        except FeatureUnavailable:
+            pass
+        with urllib.request.urlopen(base_url.rstrip("/") + "/api/tags", timeout=1) as resp:  # noqa: S310
+            data = json.loads(resp.read().decode("utf-8") or "{}")
+    except Exception:
+        return []
+    models = []
+    for m in data.get("models") or []:
+        name = str(m.get("name") or "").strip()
+        if name:
+            models.append({"name": name, "size": str((m.get("details") or {}).get("parameter_size") or ""),
+                           "bytes": int(m.get("size") or 0)})
+    return sorted(models, key=lambda m: m["bytes"])
+
+
+def same_model(a: str, b: str) -> bool:
+    """'mistral' and 'mistral:latest' name the same Ollama model."""
+    norm = lambda s: s if ":" in s else f"{s}:latest"  # noqa: E731
+    return norm(str(a or "")) == norm(str(b or ""))
+
+
 def status_row(label: str, ok: bool, ok_text: str, bad_text: str) -> None:
     st.markdown(f'<span class="jh-dot {"on" if ok else ""}"></span>**{label}:** {ok_text if ok else bad_text}',
                 unsafe_allow_html=True)

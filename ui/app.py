@@ -144,20 +144,49 @@ def render_sidebar(settings) -> None:
         st.caption("Writes cover letters and resume suggestions.")
         use_ollama = bool(getattr(settings, "use_ollama", True))
         base = str(getattr(settings, "ollama_base_url", "http://localhost:11434"))
-        model = getattr(settings, "ollama_model", "mistral")
+        models = c.ollama_models(base) if use_ollama else []
         if use_ollama:
-            c.status_row("Ollama", c.ollama_reachable(base), f"ready ({model})",
+            count = f"{len(models)} model{'s' if len(models) != 1 else ''} installed"
+            c.status_row("Ollama", bool(models) or c.ollama_reachable(base), f"ready, {count}",
                          "not running. Start it with `ollama serve`")
         else:
             c.status_row("Ollama", False, "", "turned off (USE_OLLAMA=false)")
         has_key = bool(getattr(settings, "gemini_api_key", None))
         c.status_row("Gemini", has_key, "API key configured", "not set up (no GEMINI_API_KEY)")
+        _pick_model(settings, models, has_key)
 
         st.divider()
         st.header("Storage")
         st.markdown(f"**Database:** `{c.db_location(str(settings.database_url))}`")
         st.markdown(f"**Documents:** `{getattr(settings, 'docs_dir', '~/jobhunt_docs')}`")
         st.caption("Everything runs on this machine. Your data only leaves it if you enable Gemini.")
+
+
+GEMINI = "gemini"  # same value as generator.llm.GEMINI, kept here so the sidebar never imports it
+
+
+def _pick_model(settings, models: list, has_key: bool) -> None:
+    """Dropdown of the installed Ollama models (smallest first) plus Gemini when a key is set."""
+    names = [m["name"] for m in models]
+    options = names + ([GEMINI] if has_key else [])
+    if not options:
+        st.session_state.pop("llm_model", None)
+        return
+    configured = str(getattr(settings, "ollama_model", "") or "")
+    default = next((n for n in names if c.same_model(n, configured)), names[0] if names else GEMINI)
+    if st.session_state.get("llm_model") not in options:
+        st.session_state["llm_model"] = default
+    sizes = {m["name"]: m["size"] for m in models}
+    st.selectbox(
+        "Model for writing", options, key="llm_model",
+        format_func=lambda n: "Gemini (online, sends your resume to Google)" if n == GEMINI
+        else f"{n} ({sizes[n]})" if sizes.get(n) else n,
+        help="Smaller models write faster on a laptop without a graphics card. The default comes "
+             "from OLLAMA_MODEL in .env. Install more with `ollama pull <name>`.")
+
+
+def _chosen_model() -> str | None:
+    return st.session_state.get("llm_model")
 
 
 # --------------------------------------------------------------------------- overview
@@ -987,7 +1016,7 @@ def _requirements(m: dict, match_id, have: set, jd: str) -> None:
         try:
             with st.spinner("Asking the language model... (local models can take a minute)"):
                 st.session_state[key] = load("generator.jd_insights", "analyze_requirements_llm")(
-                    {"title": g(m, "title"), "description": jd})
+                    {"title": g(m, "title"), "description": jd}, model=_chosen_model())
             st.rerun()
         except Exception as exc:
             if _is_llm_unavailable(exc):
@@ -1084,6 +1113,12 @@ DOC_TYPES = {"cover_letter": "Cover letter", "resume_suggestions": "Resume sugge
 
 def _llm_note(settings) -> tuple[bool, str]:
     """Whether a language model is ready, and one line saying which one will write."""
+    chosen = _chosen_model()
+    if chosen == GEMINI:
+        return True, "Written by Gemini. Your resume and the posting are sent to Google for this."
+    if chosen:
+        return True, (f"Written by {chosen} on this machine (change it in the sidebar). "
+                      "Without a graphics card this can take a few minutes.")
     if settings is not None and bool(getattr(settings, "use_ollama", True)) and c.ollama_reachable(
             str(getattr(settings, "ollama_base_url", "http://localhost:11434"))):
         return True, f"Written by Ollama ({getattr(settings, 'ollama_model', 'mistral')}) on this machine."
@@ -1157,11 +1192,11 @@ def tab_generate(resume: dict | None, settings=None) -> None:
     if generate:
         job = _job_for(match)
         try:
-            with st.spinner(f"Writing the {DOC_TYPES[doc_type].lower()}... (local models can take a minute)"):
+            with st.spinner(f"Writing the {DOC_TYPES[doc_type].lower()}... (on a laptop this can take a few minutes)"):
                 if doc_type == "cover_letter":
-                    text = load("generator.cover_letter", "generate_cover_letter")(resume, job)
+                    text = load("generator.cover_letter", "generate_cover_letter")(resume, job, model=_chosen_model())
                 else:
-                    text = load("generator.resume_optimizer", "suggest_resume_edits")(resume, job)
+                    text = load("generator.resume_optimizer", "suggest_resume_edits")(resume, job, model=_chosen_model())
             st.session_state[draft_key] = text or ""
             if text:
                 st.toast("Draft ready. Edit it below, then download or save it.")

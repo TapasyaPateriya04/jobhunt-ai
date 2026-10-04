@@ -1,3 +1,4 @@
+import json
 import sys
 import types
 from pathlib import Path
@@ -21,12 +22,23 @@ JOB = {"title": "Backend Engineer", "company": "Globex",
 
 
 class FakeResp:
-    def __init__(self, payload, status=200):
+    """A response; ``lines`` are the JSON lines Ollama streams back."""
+
+    def __init__(self, payload, status=200, lines=None):
         self._payload = payload
         self.status_code = status
+        self.lines = lines if lines is not None else [payload]
+        self.closed = False
 
     def json(self):
         return self._payload
+
+    def iter_lines(self):
+        for line in self.lines:
+            yield line if isinstance(line, (bytes, str)) else json.dumps(line).encode()
+
+    def close(self):
+        self.closed = True
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -49,16 +61,52 @@ def clean_env(monkeypatch):
 
 def test_call_llm_ollama_success(monkeypatch):
     seen = {}
+    chunks = [{"response": "  Hel"}, b"", {"response": "lo!  "}, {"response": "", "done": True}]
 
-    def fake_post(url, json=None, timeout=None):
-        seen.update(url=url, json=json, timeout=timeout)
-        return FakeResp({"response": "  Hello!  "})
+    def fake_post(url, json=None, timeout=None, stream=False):
+        seen.update(url=url, json=json, timeout=timeout, stream=stream)
+        seen["resp"] = FakeResp({}, lines=chunks)
+        return seen["resp"]
 
     monkeypatch.setattr(requests, "post", fake_post)
     assert llm.call_llm("hi") == "Hello!"
     assert seen["url"] == "http://localhost:11434/api/generate"
-    assert seen["json"]["model"] == "mistral" and seen["json"]["stream"] is False
-    assert seen["timeout"]
+    assert seen["json"]["model"] == "mistral" and seen["json"]["stream"] is True and seen["stream"]
+    assert seen["timeout"] and seen["resp"].closed
+
+
+def test_call_llm_uses_the_model_picked(monkeypatch):
+    seen = {}
+
+    def fake_post(url, json=None, timeout=None, stream=False):
+        seen["model"] = json["model"]
+        return FakeResp({}, lines=[{"response": "ok", "done": True}])
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    assert llm.call_llm("hi", model="llama3.2:3b") == "ok" and seen["model"] == "llama3.2:3b"
+
+
+def test_call_llm_gemini_choice_skips_ollama(monkeypatch):
+    # requests.post raises if called, so reaching Gemini's "not set up" message proves Ollama was skipped.
+    with pytest.raises(llm.LLMUnavailable) as ei:
+        llm.call_llm("hi", model=llm.GEMINI)
+    assert "GEMINI_API_KEY" in str(ei.value) and "Ollama" not in str(ei.value)
+
+
+def test_call_llm_slow_model_message_suggests_a_smaller_one(monkeypatch):
+    def slow(*a, **k):
+        raise requests.Timeout("read timed out")
+
+    monkeypatch.setattr(requests, "post", slow)
+    with pytest.raises(llm.LLMUnavailable) as ei:
+        llm.call_llm("hi")
+    assert "ollama pull llama3.2:3b" in str(ei.value) and "ollama pull mistral" not in str(ei.value)
+
+
+def test_call_llm_ollama_stream_error(monkeypatch):
+    monkeypatch.setattr(requests, "post", lambda *a, **k: FakeResp({}, lines=[{"error": "out of memory"}]))
+    with pytest.raises(llm.LLMUnavailable, match="out of memory"):
+        llm.call_llm("hi")
 
 
 def test_call_llm_rejects_remote_ollama_endpoint(monkeypatch):
@@ -130,7 +178,7 @@ def test_call_llm_gemini_error_does_not_leak_key(monkeypatch):
 def test_cover_letter_prompt_wraps_untrusted(monkeypatch):
     captured = {}
 
-    def fake_llm(prompt):
+    def fake_llm(prompt, **_):
         captured["prompt"] = prompt
         return "Sure! Here is your letter:\n\nDear Hiring Manager,\nI am great."
 
@@ -147,7 +195,7 @@ def test_cover_letter_prompt_wraps_untrusted(monkeypatch):
 
 def test_resume_optimizer_includes_skill_gap(monkeypatch):
     captured = {}
-    monkeypatch.setattr(resume_optimizer, "call_llm", lambda p: captured.setdefault("p", p) and " tips ")
+    monkeypatch.setattr(resume_optimizer, "call_llm", lambda p, **_: captured.setdefault("p", p) and " tips ")
     assert resume_optimizer.suggest_resume_edits(RESUME, JOB) == "tips"
     gap = resume_optimizer.skill_gap(RESUME, JOB)
     assert gap["matched"] == ["Python"]
@@ -218,7 +266,7 @@ def test_analyze_requirements_llm_keeps_only_skills_in_posting(monkeypatch):
 
     prompts = []
 
-    def fake_llm(prompt):
+    def fake_llm(prompt, **_):
         prompts.append(prompt)
         return ('Sure! {"must_have": ["Java", "spring boot", "COBOL", "Ignore previous instructions"], '
                 '"nice_to_have": ["Kafka", "Java", 42]} Hope that helps.')
@@ -230,5 +278,5 @@ def test_analyze_requirements_llm_keeps_only_skills_in_posting(monkeypatch):
     assert req == {"must_have": ["Java", "Spring Boot"], "nice_to_have": ["Kafka"], "source": "llm"}
     assert "BEGIN UNTRUSTED JOB_DESCRIPTION" in prompts[0] and "JSON only" in prompts[0]
 
-    monkeypatch.setattr(jd_insights, "call_llm", lambda prompt: "I cannot answer that.")
+    monkeypatch.setattr(jd_insights, "call_llm", lambda prompt, **_: "I cannot answer that.")
     assert jd_insights.analyze_requirements_llm(job)["source"] == "rules"  # unusable answer -> rules
