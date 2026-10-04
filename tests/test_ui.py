@@ -525,3 +525,17 @@ def test_model_picker_lists_ollama_models_and_reaches_the_generator(ui_env, monk
     _assert_clean(at)
     assert used["model"] == "llama3.2:3b"
     assert any("Written by llama3.2:3b" in cap.value for cap in at.caption)
+
+
+def test_draft_with_invented_claims_gets_a_warning(ui_env):
+    from db import repository as repo
+
+    rid = _seed()
+    mid = repo.list_matches(rid)[0]["id"]
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.session_state[f"draft_{mid}_cover_letter"] = (
+        "Dear Hiring Manager,\n\nAs a seasoned engineer with 8 years of experience, I am a great fit.")
+    at.run()
+    _assert_clean(at)
+    (warning,) = [w.value for w in at.warning if "before you send this" in w.value]
+    assert "Check 1 sentence" in warning and "seasoned" in warning and "8 years" in warning

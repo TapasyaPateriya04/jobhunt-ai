@@ -45,6 +45,31 @@ def _names(items) -> str:
     return " ".join(str(i.get("name") or "") for i in (items or []) if isinstance(i, dict))
 
 
+# Spellings a company board may use for the same place.
+_ALIASES = {"bangalore": "bengaluru", "bengaluru": "bangalore", "gurgaon": "gurugram", "gurugram": "gurgaon",
+            "bombay": "mumbai", "mumbai": "bombay", "new delhi": "delhi", "delhi": "new delhi"}
+
+
+def location_wanted(location: str) -> list[str]:
+    """Places to keep from a search location such as "Bangalore, India; Remote": every part,
+    lower-cased, with common alternative spellings. Empty means keep everything."""
+    places: list[str] = []
+    for part in re.split(r"[;,|/]", str(location or "")):
+        place = " ".join(part.split()).lower()
+        if place and place not in places:
+            places.append(place)
+            if place in _ALIASES:
+                places.append(_ALIASES[place])
+    return places
+
+
+def location_ok(job_location: str, wanted: list[str]) -> bool:
+    if not wanted:
+        return True
+    text = " ".join(str(job_location or "").lower().split())
+    return any(re.search(r"\b" + re.escape(place) + r"\b", text) for place in wanted)
+
+
 # ----------------------------------------------------------------------------- Greenhouse
 
 def _greenhouse_text(job: dict) -> str:
@@ -52,11 +77,19 @@ def _greenhouse_text(job: dict) -> str:
     return html_to_text(html.unescape(str(job.get("content") or "")))
 
 
-def parse_greenhouse(payload, board: str, keywords: str = "", max_jobs: int = 20) -> list[dict]:
-    """Filter + normalize one Greenhouse board payload (pure function, used by tests)."""
+def _gh_location(job: dict) -> str:
+    location = job.get("location")
+    return str(location.get("name") if isinstance(location, dict) else location or "")
+
+
+def parse_greenhouse(payload, board: str, keywords: str = "", max_jobs: int = 20, location: str = "") -> list[dict]:
+    """Filter + normalize one Greenhouse board payload (pure function, used by tests).
+    ``location`` keeps only jobs in one of its places (see :func:`location_wanted`)."""
     items = payload.get("jobs") if isinstance(payload, dict) else None
     if not isinstance(items, list):
         return []
+    wanted = location_wanted(location)
+    items = [j for j in items if isinstance(j, dict) and location_ok(_gh_location(j), wanted)]
     picked = select_relevant(items, keywords, max_jobs, lambda j: (
         str(j.get("title") or ""), _names(j.get("departments")), _greenhouse_text(j)))
     out: list[dict] = []
@@ -88,10 +121,18 @@ def _lever_categories(job: dict) -> dict:
     return job.get("categories") if isinstance(job.get("categories"), dict) else {}
 
 
-def parse_lever(payload, company: str, keywords: str = "", max_jobs: int = 20) -> list[dict]:
+def _lever_location(job: dict) -> str:
+    cats = _lever_categories(job)
+    return " ; ".join([str(cats.get("location") or ""), *map(str, cats.get("allLocations") or []),
+                       str(job.get("workplaceType") or "")])
+
+
+def parse_lever(payload, company: str, keywords: str = "", max_jobs: int = 20, location: str = "") -> list[dict]:
     """Filter + normalize one Lever postings payload (pure function, used by tests)."""
     if not isinstance(payload, list):
         return []
+    wanted = location_wanted(location)
+    payload = [j for j in payload if isinstance(j, dict) and location_ok(_lever_location(j), wanted)]
     picked = select_relevant(payload, keywords, max_jobs, lambda j: (
         str(j.get("text") or ""),
         " ".join(str(_lever_categories(j).get(k) or "") for k in ("team", "department")),
@@ -112,12 +153,12 @@ def parse_lever(payload, company: str, keywords: str = "", max_jobs: int = 20) -
 # ----------------------------------------------------------------------------- fetch
 
 def _fetch_boards(source: str, slugs: list[str], url_tpl: str, params: dict, parse,
-                  keywords: str, max_jobs: int, env_name: str) -> list[dict]:
+                  keywords: str, max_jobs: int, env_name: str, location: str = "") -> list[dict]:
     if not slugs:
         logger.warning("{}: no companies configured; set {} in .env (comma-separated slugs)",
                        source, env_name)
         return []
-    jobs: list[dict] = []
+    per_board: list[list[dict]] = []
     for slug in slugs:
         try:
             payload = net.polite_get_json(url_tpl.format(slug), params=params)
@@ -127,21 +168,29 @@ def _fetch_boards(source: str, slugs: list[str], url_tpl: str, params: dict, par
         except (requests.RequestException, ValueError) as exc:
             logger.warning("{} request for '{}' failed: {}", source, slug, type(exc).__name__)
             continue
-        found = parse(payload, slug, keywords, max_jobs)
+        found = parse(payload, slug, keywords, max_jobs, location)
         logger.info("{} {}: {} matching jobs", source, slug, len(found))
-        jobs.extend(found)
+        per_board.append(found)
+    # Take turns between companies so one big board cannot fill the whole quota.
+    jobs: list[dict] = []
+    for i in range(max((len(found) for found in per_board), default=0)):
+        jobs.extend(found[i] for found in per_board if i < len(found))
     return jobs[:max_jobs]
 
 
-def fetch_greenhouse(keywords, max_jobs: int = 20, boards: Iterable[str] | None = None) -> list[dict]:
-    """Jobs matching ``keywords`` from the configured Greenhouse boards. [] on failure."""
+def fetch_greenhouse(keywords, max_jobs: int = 20, boards: Iterable[str] | None = None,
+                     location: str = "") -> list[dict]:
+    """Jobs matching ``keywords`` (and ``location``, when given) from the configured Greenhouse
+    boards. [] on failure."""
     slugs = _valid_slugs(get_settings().greenhouse_boards if boards is None else boards, "Greenhouse")
     return _fetch_boards("Greenhouse", slugs, GREENHOUSE_URL, {"content": "true"}, parse_greenhouse,
-                         keywords, max_jobs, "GREENHOUSE_BOARDS")
+                         keywords, max_jobs, "GREENHOUSE_BOARDS", location)
 
 
-def fetch_lever(keywords, max_jobs: int = 20, companies: Iterable[str] | None = None) -> list[dict]:
-    """Jobs matching ``keywords`` from the configured Lever companies. [] on failure."""
+def fetch_lever(keywords, max_jobs: int = 20, companies: Iterable[str] | None = None,
+                location: str = "") -> list[dict]:
+    """Jobs matching ``keywords`` (and ``location``, when given) from the configured Lever
+    companies. [] on failure."""
     slugs = _valid_slugs(get_settings().lever_companies if companies is None else companies, "Lever")
     return _fetch_boards("Lever", slugs, LEVER_URL, {"mode": "json"}, parse_lever,
-                         keywords, max_jobs, "LEVER_COMPANIES")
+                         keywords, max_jobs, "LEVER_COMPANIES", location)

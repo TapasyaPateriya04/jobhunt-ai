@@ -1212,6 +1212,7 @@ def tab_generate(resume: dict | None, settings=None) -> None:
     if draft_key in st.session_state:
         content = st.text_area("Edit before saving", key=draft_key, height=380)
         st.caption(f"{len(content.split())} words. Changes you type here go into the files below.")
+        _draft_check(content, resume, match)
         safe_company = "".join(ch for ch in str(g(match, "company", default="job")) if ch.isalnum())[:40] or "job"
         title = f"{DOC_TYPES[doc_type]}: {g(match, 'title', default='')} at {g(match, 'company', default='')}"
         _export_buttons(content, f"{doc_type}_{safe_company}", title, "draft")
@@ -1236,6 +1237,21 @@ def tab_generate(resume: dict | None, settings=None) -> None:
                     get.download_button("Download .txt", str(d.get("content") or ""),
                                         file_name=f"{d.get('doc_type')}_{d.get('id')}.txt", mime="text/plain",
                                         key=f"saved_doc_{d.get('id')}", use_container_width=True)
+
+
+def _draft_check(content: str, resume: dict, match: dict) -> None:
+    """Point at sentences that claim more than the resume shows (models embellish)."""
+    try:
+        flags = load("generator.fact_check", "check_draft")(content, resume, _job_for(match))
+    except Exception:
+        c.log.exception("draft check failed")
+        return
+    if not flags:
+        st.caption("No claims found that go beyond your resume. Still read it once before you send it.")
+        return
+    lines = "\n".join(f"- *{c.html.escape(f['sentence'][:160])}*  \n  {f['why']}" for f in flags)
+    st.warning(f"**Check {len(flags)} sentence{'s' if len(flags) != 1 else ''} before you send this.** "
+               f"They may claim more than your resume shows:\n\n{lines}")
 
 
 def _job_for(match: dict) -> dict:
