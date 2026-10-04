@@ -499,3 +499,29 @@ def test_backup_and_clean_up_panel(ui_env):
     assert [j["title"] for j in repo.list_jobs()] == ["Python Developer"]
     assert len(repo.list_matches(rid)) == 1
     assert any("Deleted 1 jobs older than 30 days" in s.value for s in at.success)
+
+
+def test_model_picker_lists_ollama_models_and_reaches_the_generator(ui_env, monkeypatch):
+    from ui import components as c
+    import generator.cover_letter as cover_letter
+
+    monkeypatch.setenv("USE_OLLAMA", "true")
+    monkeypatch.setenv("OLLAMA_MODEL", "mistral")
+    models = [{"name": "llama3.2:3b", "size": "3.2B", "bytes": 2}, {"name": "mistral:latest", "size": "7.2B", "bytes": 4}]
+    monkeypatch.setattr(c, "ollama_models", lambda base: models)
+    monkeypatch.setattr(c, "ollama_reachable", lambda base: True)
+    used = {}
+    monkeypatch.setattr(cover_letter, "generate_cover_letter",
+                        lambda resume, job, model=None: used.setdefault("model", model) and "Dear Hiring Manager,")
+    _seed()
+    at = _run()
+    _assert_clean(at)
+    picker = at.selectbox(key="llm_model")
+    assert picker.options == ["llama3.2:3b (3.2B)", "mistral:latest (7.2B)"]
+    assert picker.value == "mistral:latest"  # OLLAMA_MODEL=mistral is the default
+    assert "2 models installed" in " ".join(m.value for m in at.sidebar.markdown)
+    picker.select("llama3.2:3b").run()
+    next(b for b in at.button if b.label == "Generate").click().run()
+    _assert_clean(at)
+    assert used["model"] == "llama3.2:3b"
+    assert any("Written by llama3.2:3b" in cap.value for cap in at.caption)

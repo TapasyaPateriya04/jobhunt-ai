@@ -35,7 +35,7 @@ cp .env.example .env                               # edit if you use Gemini
 # Optional extras
 playwright install chromium                        # only for the experimental Indeed/LinkedIn/Naukri scrapers
 python -m spacy download en_core_web_sm            # better skill hints
-ollama pull mistral                                # local LLM (https://ollama.ai)
+ollama pull llama3.2:3b                            # local LLM (https://ollama.com); mistral if you have a GPU
 
 python scripts/init_db.py                          # creates or upgrades jobhunt.db
 streamlit run ui/app.py                            # open http://localhost:8501
@@ -45,6 +45,40 @@ On Windows: if `spacy download` fails with a 404, install the model wheel direct
 `pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl`.
 Ollama installs with `winget install Ollama.Ollama`. On a CPU-only laptop the first Mistral
 generation can take about two minutes.
+
+### Windows setup
+
+The app is developed on Windows 11 with Python 3.10, and CI tests Windows with Python 3.11. Run these in PowerShell from the
+project folder.
+
+```powershell
+py -3.11 -m venv .venv                                   # or: python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+copy .env.example .env
+.venv\Scripts\python -m playwright install chromium     # only for the experimental scrapers
+winget install Ollama.Ollama                             # then, in a new terminal:
+ollama pull llama3.2:3b
+.venv\Scripts\python -m streamlit run ui/app.py
+```
+
+- **Always start the app with `.venv\Scripts\python`.** Plain `python` or `streamlit` may be a
+  different Python without the project's libraries; the app then says a library such as
+  `sqlalchemy` is missing.
+- **Activating the environment** (`.venv\Scripts\Activate.ps1`) is optional. If PowerShell refuses
+  to run it, use the `.venv\Scripts\python` form above, or allow local scripts once with
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+- **spaCy model**: `python -m spacy download en_core_web_sm` can fail with a 404 on Windows; install
+  the wheel directly instead (see the note above).
+- **First run downloads the MiniLM model** (about 90 MB) into `%USERPROFILE%\.cache\huggingface`.
+  Scoring works offline afterwards, and falls back to keyword similarity if the download fails.
+- **Ollama on a laptop without a GPU**: use a small model. `ollama pull llama3.2:3b` writes a cover
+  letter in about a minute on a mid-range laptop CPU; Mistral 7B can take five. Pick the model in the
+  sidebar's **Model for writing**, or set the default with `OLLAMA_MODEL=llama3.2:3b` in `.env`.
+  Replies are streamed, so a slow model is only stopped if it goes quiet for 5 minutes.
+- **The app only listens on localhost** (`.streamlit/config.toml`), so others on your Wi-Fi cannot
+  open it. Keep it that way: your resume and job data are in it.
+- **Tests**: one test creates a symlink, which Windows only allows with Developer Mode or an admin
+  terminal; it is skipped otherwise. Git's CRLF line endings are handled by the parser.
 
 Or run the whole pipeline from the terminal:
 
@@ -114,6 +148,13 @@ numbers and the next step to take.
 - **Documents tab**: draft a cover letter or resume suggestions with the local model (or Gemini),
   edit the draft and download it as .txt, .docx or .pdf.
 
+### Demo video
+
+`python scripts/record_demo.py` records a 50-second captioned walkthrough of the running app
+(resume, finding jobs, matches, applications, documents) as an MP4 in `<docs_dir>/demo/`. It needs
+Playwright's Chromium and ffmpeg. The video shows your own resume and jobs, so it is kept out of
+the repository; share it only if you are happy for others to see them.
+
 ## Database
 
 The schema is managed with Alembic (`db/migrations`). The app applies migrations when it starts,
@@ -174,7 +215,17 @@ restriction worded in an unusual way can be missed, so read the posting before a
 pip install -r requirements-dev.txt
 python -m pytest -q             # offline unit tests (what CI runs)
 python -m pytest -m live -v     # opt-in smoke tests against the real job APIs
+python -m pytest -m localdata   # opt-in: prompt-injection checks over every posting in your jobhunt.db
+pip-audit -r requirements.txt --no-deps --disable-pip   # known vulnerabilities in the pinned packages
 ```
+
+CI runs the tests on Ubuntu and Windows, and `pip-audit` on every push and each Monday. Both
+requirements files are pinned to exact versions; when `pip-audit` reports a vulnerable package,
+bump its pin in both files, reinstall and re-run the tests.
+
+`tests/test_prompt_injection.py` plants attacks (instructions to the model, fake end-of-data
+markers, chat-template tokens, invisible characters) at the start, middle and end of real scraped
+postings in `tests/fixtures/real_jds.json`, and checks every prompt keeps them fenced off as data.
 
 ## Ethical scraping
 

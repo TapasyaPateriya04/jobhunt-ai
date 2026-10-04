@@ -100,12 +100,12 @@ def _grounded(items, jd_text: str, seen: set[str]) -> list[str]:
     return out[:MAX_SKILLS]
 
 
-def analyze_requirements_llm(job: dict) -> dict:
+def analyze_requirements_llm(job: dict, model: str | None = None) -> dict:
     """LLM split of must-have vs nice-to-have skills. Falls back to the rule-based split
     when the model's answer is not usable. Raises ``LLMUnavailable`` when no model runs."""
     job = job or {}
     jd_text = str(job.get("description") or "")
-    data = _parse_llm_json(call_llm(build_requirements_prompt(job)))
+    data = _parse_llm_json(call_llm(build_requirements_prompt(job), model=model))
     if data is None:
         return split_requirements(jd_text)
     seen: set[str] = set()

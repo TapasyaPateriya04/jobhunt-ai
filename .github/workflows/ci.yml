@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # every Monday, so newly published vulnerabilities show up without a push
 jobs:
   test:
     strategy:
@@ -18,3 +20,21 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install pip-audit==2.10.1
+      # Every pin in both files, without installing the heavy ML stack.
+      - run: pip-audit --progress-spinner off --no-deps --disable-pip -r requirements.txt -r requirements-dev.txt
+      # Everything the test environment pulls in, including indirect dependencies. The runner's
+      # Python ships its own pip and setuptools, which go stale; upgrade them so the audit is
+      # about this project's packages, not the image's.
+      - run: python -m pip install --upgrade pip setuptools
+      - run: pip install -r requirements-dev.txt
+      - run: pip-audit --progress-spinner off --skip-editable

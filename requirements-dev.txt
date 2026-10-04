@@ -1,16 +1,19 @@
 # Lightweight set used by CI/tests: no torch, no browsers, no spaCy model.
-beautifulsoup4
-requests
-pylatexenc
-scikit-learn
-numpy
-sqlalchemy
-streamlit
-pandas
-python-dotenv
-loguru
-rich
-pytest
-python-docx
-fpdf2
-alembic
+# Pinned to the same versions as requirements.txt so CI tests what you run.
+# CI audits both files with pip-audit; bump a pin here and in requirements.txt together.
+alembic==1.13.2
+beautifulsoup4==4.12.3
+fpdf2==2.7.9
+loguru==0.7.2
+numpy==1.26.4
+pandas==2.2.2
+pillow==12.3.0
+pylatexenc==2.10
+pytest==9.1.1
+python-docx==1.1.2
+python-dotenv==1.2.4
+requests==2.34.2
+rich==13.7.1
+scikit-learn==1.7.2
+sqlalchemy==2.0.30
+streamlit==1.64.0

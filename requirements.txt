@@ -1,30 +1,32 @@
 # Web scraping
 playwright==1.44.0
 beautifulsoup4==4.12.3
-requests==2.32.3
+requests==2.34.2
 
 # Resume parsing
 pylatexenc==2.10
 spacy==3.7.4
-pypdf==4.2.0
+pypdf==6.19.0
 
 # ML & Embeddings (all free, all local)
 scikit-learn==1.7.2          # 1.4.x bundles an old MSVC runtime that breaks torch imports on Windows
-sentence-transformers==3.0.1
+sentence-transformers==6.1.0
+transformers==5.18.0         # comes with sentence-transformers; pinned past known CVEs (pip-audit)
 numpy==1.26.4
 
 # Database
 sqlalchemy==2.0.30
 
 # UI
-streamlit==1.35.0
+streamlit==1.64.0
 pandas==2.2.2
+pillow==12.3.0               # comes with streamlit; pinned past known CVEs (pip-audit)
 
 # LLM (optional if using Ollama)
 google-genai==2.25.0         # Gemini free tier (new SDK)
 
 # Utilities
-python-dotenv==1.0.1
+python-dotenv==1.2.4
 loguru==0.7.2
 rich==13.7.1
 

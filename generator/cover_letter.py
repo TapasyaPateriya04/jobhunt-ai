@@ -48,5 +48,5 @@ def _clean_output(text: str) -> str:
     return text
 
 
-def generate_cover_letter(resume: dict, job: dict) -> str:
-    return _clean_output(call_llm(build_cover_letter_prompt(resume or {}, job or {})))
+def generate_cover_letter(resume: dict, job: dict, model: str | None = None) -> str:
+    return _clean_output(call_llm(build_cover_letter_prompt(resume or {}, job or {}), model=model))
