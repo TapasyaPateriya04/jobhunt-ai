@@ -68,16 +68,13 @@ CSS = r"""
   --jh-bad:#b91c1c; --jh-bad-wash:#fbeaea;
   --jh-r:6px;
 }
-[data-testid="stAppViewBlockContainer"], .block-container {max-width:1080px; padding-top:2.2rem; padding-bottom:4rem;}
+[data-testid="stMainBlockContainer"], .block-container {max-width:1080px; padding-top:2.2rem; padding-bottom:4rem;}
 h1 {font-size:1.9rem !important; font-weight:700 !important; letter-spacing:-.02em; padding-bottom:.1rem !important;}
 h3 {font-size:1.3rem !important; font-weight:650 !important; letter-spacing:-.01em;}
 h4 {font-size:1.02rem !important; font-weight:650 !important; padding-top:1rem !important;}
 *:focus-visible {outline:2px solid var(--jh-accent) !important; outline-offset:2px;}
 [data-testid="stWidgetLabel"] p {font-weight:600; color:var(--jh-ink-2); font-size:.88rem;}
 [data-testid="stForm"] {border:0; padding:0;}
-/* A row that pairs a labelled field with a button: sit the button on the field's baseline. */
-[data-testid="stHorizontalBlock"]:has(> [data-testid="column"] [data-testid="stWidgetLabel"]):has(> [data-testid="column"] button[kind]) {
-  align-items:flex-end;}
 [data-testid="stSidebar"] code {overflow-wrap:anywhere; white-space:normal;}
 
 .jh-panel-title {font-size:.76rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;

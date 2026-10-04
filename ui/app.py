@@ -348,7 +348,7 @@ def _skills_editor(resume: dict) -> None:
             st.caption("Added by you")
             c.chips(extra, "ok")
         with st.form("add_skill_form", clear_on_submit=True):
-            col_in, col_btn = st.columns([5, 1])
+            col_in, col_btn = st.columns([5, 1], vertical_alignment="bottom")
             typed = col_in.text_input("Add a skill", placeholder="e.g. Kafka, Hibernate, System Design",
                                       help="For skills your resume file doesn't mention. Separate several "
                                            "with commas. They count in matching and skill suggestions.")
@@ -365,7 +365,7 @@ def _skills_editor(resume: dict) -> None:
                 st.warning("Type a skill first.")
     if extra:
         with box:
-            col_pick, col_rm = st.columns([5, 1])
+            col_pick, col_rm = st.columns([5, 1], vertical_alignment="bottom")
             remove = col_pick.selectbox("Remove a skill you added", ["(choose one)"] + extra, key="remove_skill")
             if col_rm.button("Remove", disabled=remove == "(choose one)", use_container_width=True,
                              key="remove_skill_btn"):
@@ -677,7 +677,7 @@ def tab_matches(resume: dict | None, settings=None) -> None:
     panel = st.container(border=True)
     with panel:
         c.panel_title("Where you can work")
-        top = st.columns([3, 2])
+        top = st.columns([3, 2], vertical_alignment="bottom")
         with top[0]:
             country = _country_picker(settings)
         rescore = top[1].button(
@@ -715,7 +715,7 @@ def tab_matches(resume: dict | None, settings=None) -> None:
             c.panel_title("Filters")
             # Widget keys carry a counter so "Reset filters" can put every control back to its default.
             k = f"_{st.session_state.get('filter_reset', 0)}"
-            s1, s2 = st.columns([5, 1])
+            s1, s2 = st.columns([5, 1], vertical_alignment="bottom")
             query = s1.text_input("Search", key=f"f_search{k}",
                                   placeholder="Title, company, location or skill, e.g. Spring Boot Bangalore",
                                   help="Every word you type must appear in the job's title, company, "
@@ -854,7 +854,7 @@ def _skill_suggestions(shown: list[dict], resume: dict) -> None:
                      f"(you have {len(gap['matched'])} of {len(gap['required'])})")
     st.markdown("\n".join(lines))
     with st.form("have_skill_form", clear_on_submit=True):
-        col_pick, col_btn = st.columns([4, 1])
+        col_pick, col_btn = st.columns([4, 1], vertical_alignment="bottom")
         have_it = col_pick.selectbox("Already have one of these? Add it to your skills",
                                      ["(choose a skill)"] + [t["skill"] for t in todo])
         if col_btn.form_submit_button("Add skill", use_container_width=True) and have_it != "(choose a skill)":
@@ -1054,7 +1054,7 @@ def tab_tracker(resume: dict | None) -> None:
         match_id = g(m, "id", "match_id")
         title = str(g(m, "title", default="Untitled role"))
         with st.container(border=True):
-            info, state, actions = st.columns([5, 2, 2])
+            info, state, actions = st.columns([5, 2, 2], vertical_alignment="center")
             details = [str(g(m, "company", default="Unknown company")), str(g(m, "location", default="") or ""),
                        f"score {c.fmt_score(_score_of(m))} ({c.score_label(_score_of(m)).lower()})",
                        c.time_ago(g(m, "posted_date")), c.source_name(g(m, "source", default=""))]
@@ -1150,7 +1150,7 @@ def tab_generate(resume: dict | None, settings=None) -> None:
     draft_key = f"draft_{match_id}_{doc_type}"
 
     ready, note = _llm_note(settings)
-    go, about = st.columns([1, 4])
+    go, about = st.columns([1, 4], vertical_alignment="center")
     generate = go.button("Generate", type="primary", use_container_width=True, key="doc_generate",
                          help="Writes a new draft. An existing draft for this job is replaced.")
     about.caption(note)
@@ -1195,7 +1195,7 @@ def tab_generate(resume: dict | None, settings=None) -> None:
                 for d in docs:
                     when = d.get("generated_at")
                     day = when.strftime("%d %b %Y, %H:%M") if hasattr(when, "strftime") else ""
-                    name, get = st.columns([3, 1])
+                    name, get = st.columns([3, 1], vertical_alignment="center")
                     name.markdown(f"**{DOC_TYPES.get(d.get('doc_type'), d.get('doc_type'))}**  \n"
                                   f"<span class='jh-muted'>{day}</span>", unsafe_allow_html=True)
                     get.download_button("Download .txt", str(d.get("content") or ""),
