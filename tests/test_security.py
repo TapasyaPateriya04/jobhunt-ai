@@ -229,10 +229,10 @@ def test_robots_redirect_off_allowlist_fails_closed(monkeypatch):
 
 def test_rate_limiter_sync_spacing():
     rl = RateLimiter(0.05)
-    start = time.monotonic()
+    start = time.perf_counter()
     for _ in range(3):
         rl.wait()
-    assert time.monotonic() - start >= 0.08  # two 0.05 s gaps, minus Windows' ~16 ms clock tick
+    assert time.perf_counter() - start >= 0.1 - 1e-4  # two 0.05 s gaps
 
 
 def test_rate_limiter_thread_safe():
@@ -243,29 +243,48 @@ def test_rate_limiter_thread_safe():
     def worker():
         rl.wait()
         with lock:
-            stamps.append(time.monotonic())
+            stamps.append(time.perf_counter())
 
     threads = [threading.Thread(target=worker) for _ in range(4)]
-    start = time.monotonic()
+    start = time.perf_counter()
     for t in threads:
         t.start()
     for t in threads:
         t.join()
     stamps.sort()
-    # The i-th caller may not run before its reserved slot. Checking against slots (not
-    # gaps between wake-ups) keeps this stable with Windows' coarse sleep timer.
-    assert all(stamp - start >= i * 0.03 - 0.001 for i, stamp in enumerate(stamps))
+    # The i-th caller may not run before its reserved slot. The limiter and this test both use
+    # perf_counter: time.monotonic() only ticks every 15.6 ms on Windows, which made this flaky.
+    assert all(stamp - start >= i * 0.03 - 1e-4 for i, stamp in enumerate(stamps))
+
+
+def test_rate_limiter_wakes_early_sleep_back_up(monkeypatch):
+    """If the OS wakes the thread early, the limiter sleeps again instead of going early."""
+    import security.rate_limit as rate_limit
+
+    clock = [100.0]
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(round(seconds, 3))
+        clock[0] += seconds * 0.5  # wake up halfway
+
+    monkeypatch.setattr(rate_limit, "_clock", lambda: clock[0])
+    monkeypatch.setattr(rate_limit.time, "sleep", fake_sleep)
+    rl = rate_limit.RateLimiter(1.0)
+    rl.wait()                      # first turn: no wait
+    rl.wait()                      # second turn: due at 101.0
+    assert clock[0] >= 101.0 - 1e-9 and sleeps[:2] == [1.0, 0.5] and len(sleeps) > 2
 
 
 def test_rate_limiter_async():
     rl = RateLimiter(0.05)
 
     async def run():
-        start = time.monotonic()
+        start = time.perf_counter()
         await asyncio.gather(*(rl.await_turn() for _ in range(3)))
-        return time.monotonic() - start
+        return time.perf_counter() - start
 
-    assert asyncio.run(run()) >= 0.08  # two 0.05 s gaps, minus Windows' ~16 ms clock tick
+    assert asyncio.run(run()) >= 0.1 - 1e-4  # two 0.05 s gaps
 
 
 def test_rate_limiter_rejects_negative():
