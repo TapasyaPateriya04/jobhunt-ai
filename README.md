@@ -6,7 +6,7 @@ Everything runs on your laptop. The full plan lives in [docs/SPEC.md](docs/SPEC.
 
 | Layer | Tool |
 |-------|------|
-| Scraping | Free APIs: RemoteOK, HN "Who's Hiring" (Algolia), The Muse, Arbeitnow, Greenhouse and Lever company boards. Experimental: Playwright + BeautifulSoup4 (Indeed / LinkedIn / Naukri) |
+| Job sources | Free official APIs only: RemoteOK, HN "Who's Hiring" (Algolia), The Muse, Arbeitnow, Himalayas, and Greenhouse and Lever company boards |
 | Parsing | pylatexenc, regex, spaCy (optional) |
 | Matching | scikit-learn TF-IDF + SentenceTransformers `all-MiniLM-L6-v2` (TF-IDF fallback if not installed) |
 | LLM | Ollama (Mistral / Llama 3.2) locally, Gemini free tier as fallback |
@@ -33,7 +33,6 @@ pip install -r requirements.txt
 cp .env.example .env                               # edit if you use Gemini
 
 # Optional extras
-playwright install chromium                        # only for the experimental Indeed/LinkedIn/Naukri scrapers
 python -m spacy download en_core_web_sm            # better skill hints
 ollama pull llama3.2:3b                            # local LLM (https://ollama.com); mistral if you have a GPU
 
@@ -55,7 +54,6 @@ project folder.
 py -3.11 -m venv .venv                                   # or: python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 copy .env.example .env
-.venv\Scripts\python -m playwright install chromium     # only for the experimental scrapers
 winget install Ollama.Ollama                             # then, in a new terminal:
 ollama pull llama3.2:3b
 .venv\Scripts\python -m streamlit run ui/app.py
@@ -110,8 +108,8 @@ tests/           pytest suite (no network, no heavy models needed)
 | The Muse | `themuse` | Free public API, large companies worldwide including India. Uses the location you give. On by default. |
 | Arbeitnow | `arbeitnow` | Free public API, mostly Europe. On by default. |
 | Greenhouse boards | `greenhouse` | Companies you list in `GREENHOUSE_BOARDS` (e.g. `gitlab`). |
+| Himalayas | `himalayas` | Free public API of remote jobs. Searches your keywords and keeps jobs open to the country in your location (e.g. "India"), including worldwide ones. On by default. |
 | Lever boards | `lever` | Companies you list in `LEVER_COMPANIES` (e.g. `palantir`). |
-| Indeed, LinkedIn, Naukri | `indeed`, `linkedin`, `naukri` | **Experimental**, off by default. See below. |
 
 The Muse has no keyword search and needs locations spelled its own way, separated by `;`:
 `--location "Bangalore, India; Gurgaon, India; Hyderabad, India; Pune, India"`. "Remote" (the
@@ -152,7 +150,7 @@ numbers and the next step to take.
 
 `python scripts/record_demo.py` records a 50-second captioned walkthrough of the running app
 (resume, finding jobs, matches, applications, documents) as an MP4 in `<docs_dir>/demo/`. It needs
-Playwright's Chromium and ffmpeg. The video shows your own resume and jobs, so it is kept out of
+Playwright (`pip install playwright`, then `python -m playwright install chromium`) and ffmpeg. The video shows your own resume and jobs, so it is kept out of
 the repository; share it only if you are happy for others to see them.
 
 ## Database
@@ -233,7 +231,9 @@ Prefer the official/free APIs above. Every request checks `robots.txt`, waits be
 each session is capped at 50 jobs. RemoteOK asks that you link back to the job and credit
 it as the source; the stored job URL does that.
 
-Indeed, LinkedIn and Naukri are **experimental** and off by default. LinkedIn's `robots.txt`
-disallows the job search, Naukri answers automated browsers with "Access Denied", and Indeed sits
-behind bot protection and restricts scraping in its Terms of Service. The scrapers return nothing
-when blocked and must never be changed to get around a block. See [SECURITY.md](SECURITY.md).
+Naukri, LinkedIn and Indeed are not used. Naukri answers automated browsers with "Access Denied",
+LinkedIn's `robots.txt` disallows its job search, and Indeed sits behind bot protection; all three
+restrict scraping in their terms. Their old browser scrapers were removed rather than left to fail.
+SmartRecruiters, Ashby and Adzuna also offer job APIs, but their `robots.txt` disallows (or will not
+serve) access for this app, so they are not used either: there are no exemptions from the robots
+check. See [SECURITY.md](SECURITY.md).

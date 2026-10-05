@@ -1,8 +1,6 @@
 """Fan out a scrape across sources, dedupe and cap the result."""
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
 import hashlib
 import re
 from typing import Callable, Iterable
@@ -11,21 +9,10 @@ from loguru import logger
 
 from config import get_settings
 
-DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow"]
-# Browser scrapers of sites that restrict automated access (robots.txt, bot protection,
-# Terms of Service). Never on by default; they usually return nothing.
-EXPERIMENTAL_SOURCES = ["indeed", "linkedin", "naukri"]
-ALL_SOURCES = DEFAULT_SOURCES + ["greenhouse", "lever"] + EXPERIMENTAL_SOURCES
-
-
-def _run_async(coro):
-    """Run a coroutine from sync code, even if an event loop is already running."""
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(asyncio.run, coro).result()
+DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow", "himalayas"]
+# Company career boards: they need the companies listed in .env.
+BOARD_SOURCES = ["greenhouse", "lever"]
+ALL_SOURCES = DEFAULT_SOURCES + BOARD_SOURCES
 
 
 def _source_fn(name: str) -> Callable[[str, str, int], list[dict]] | None:
@@ -48,15 +35,9 @@ def _source_fn(name: str) -> Callable[[str, str, int], list[dict]] | None:
     if name == "lever":
         from scraper.ats_boards import fetch_lever
         return lambda kw, loc, n: fetch_lever(kw, max_jobs=n, location=loc)
-    if name == "indeed":
-        from scraper.indeed_scraper import scrape_indeed
-        return lambda kw, loc, n: _run_async(scrape_indeed(kw, loc, n))
-    if name == "linkedin":
-        from scraper.linkedin_scraper import scrape_linkedin
-        return lambda kw, loc, n: _run_async(scrape_linkedin(kw, loc, n))
-    if name == "naukri":
-        from scraper.naukri_scraper import scrape_naukri
-        return lambda kw, loc, n: _run_async(scrape_naukri(kw, loc, n))
+    if name == "himalayas":
+        from scraper.himalayas_scraper import fetch_himalayas
+        return lambda kw, loc, n: fetch_himalayas(kw, loc, max_jobs=n)
     return None
 
 
@@ -105,9 +86,6 @@ def scrape_jobs(keywords: str, location: str = "Remote", max_jobs: int = 20,
         if fn is None:
             logger.warning("Unknown job source '{}' (choose from {})", name, ", ".join(ALL_SOURCES))
             continue
-        if name in EXPERIMENTAL_SOURCES:
-            logger.warning("Source {} is experimental: the site restricts automated access, "
-                           "so expect few or no results. Personal, low-volume use only.", name)
         try:
             found = fn(keywords, location, cap) or []
         except Exception as exc:  # one bad source must not sink the whole scrape

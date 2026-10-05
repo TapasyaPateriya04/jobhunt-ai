@@ -2,7 +2,7 @@
 
 Python 3.10+. Package root is the repo root; run the app with `streamlit run ui/app.py`
 (ui/app.py inserts the repo root onto sys.path). Heavy/optional deps (spacy,
-sentence-transformers, playwright, google-genai) MUST be imported lazily and the
+sentence-transformers, google-genai) MUST be imported lazily and the
 code MUST degrade gracefully when they are missing (tests run without them).
 
 ## config.py (owner: security)
@@ -55,10 +55,10 @@ code MUST degrade gracefully when they are missing (tests run without them).
   `fetch_arbeitnow(keywords, max_jobs=20)` (free public JSON APIs; default sources).
 - `scraper/ats_boards.py`: `fetch_greenhouse(keywords, max_jobs=20, boards=None)`, `fetch_lever(keywords, max_jobs=20,
   companies=None)` (public job-board APIs for the company slugs in settings; [] when none configured).
-- `scraper/indeed_scraper.py`, `linkedin_scraper.py`, `naukri_scraper.py`: EXPERIMENTAL async Playwright+BS4 scrapers per SPEC §5.2,
-  each checks robots via `security.robots.can_fetch` and uses RateLimiter; fail gracefully (return []) when playwright missing.
+- `scraper/himalayas_scraper.py`: `fetch_himalayas(keywords, location, max_jobs)`, remote jobs from the free
+  Himalayas API filtered to the location's country; returns [] on failure.
 - `scraper/__init__.py` or `scraper/service.py`: `scrape_jobs(keywords, location, max_jobs, sources: list[str]) -> list[dict]`;
-  `DEFAULT_SOURCES` (remoteok, hn, themuse, arbeitnow), `EXPERIMENTAL_SOURCES` (indeed, linkedin, naukri), `ALL_SOURCES`.
+  `DEFAULT_SOURCES` (remoteok, hn, themuse, arbeitnow, himalayas), `BOARD_SOURCES` (greenhouse, lever), `ALL_SOURCES`.
 - `parser/resume_parser.py`: `parse_resume_text(text) -> dict`, `parse_latex_resume(path) -> dict`,
   `parse_resume_bytes(filename, data) -> dict` (.tex/.txt/.md; .pdf optional) returning
   `{"raw_text","skills": list[str],"experience": list[dict],"education": str,"summary": str}`.

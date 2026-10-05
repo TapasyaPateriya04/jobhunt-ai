@@ -99,33 +99,38 @@ def test_validate_upload_accepts_ext_without_dot():
 # ---------- url_guard ----------
 
 @pytest.mark.parametrize("url", [
-    "https://www.indeed.com/jobs?q=python",
-    "https://in.indeed.com/viewjob?jk=1",
-    "https://www.linkedin.com/jobs/view/1",
-    "https://www.naukri.com/python-jobs",
+    "https://www.themuse.com/api/public/jobs",
+    "https://api.lever.co/v0/postings/x",
+    "https://himalayas.app/jobs/api/search?q=java",
     "https://remoteok.com/api",
     "https://hn.algolia.com/api/v1/search?query=hiring",
     "https://news.ycombinator.com/item?id=1",
-    "http://WWW.Indeed.COM./jobs",
+    "http://WWW.RemoteOK.COM./api",
 ])
 def test_allowed_urls(url):
     assert is_allowed_url(url)
 
 
+@pytest.mark.parametrize("url", ["https://www.indeed.com/jobs", "https://www.linkedin.com/jobs/view/1",
+                                 "https://www.naukri.com/python-jobs"])
+def test_sites_that_block_bots_are_not_allowlisted(url):
+    assert not is_allowed_url(url)
+
+
 @pytest.mark.parametrize("url", [
-    "ftp://indeed.com/x",
+    "ftp://remoteok.com/x",
     "file:///etc/passwd",
     "javascript:alert(1)",
-    "https://evil.com/?indeed.com",
-    "https://indeed.com.evil.com/",
-    "https://notindeed.com/",
-    "https://user:pw@indeed.com/",
-    "https://evil.com@indeed.com/",  # credentials present -> rejected
+    "https://evil.com/?remoteok.com",
+    "https://remoteok.com.evil.com/",
+    "https://notremoteok.com/",
+    "https://user:pw@remoteok.com/",
+    "https://evil.com@remoteok.com/",  # credentials present -> rejected
     "http://127.0.0.1/",
     "http://169.254.169.254/latest/meta-data",
     "http://localhost:11434/",
-    "https://indeed.com:99999/",
-    "https://indeed.com/\r\nHost: evil",
+    "https://remoteok.com:99999/",
+    "https://remoteok.com/\r\nHost: evil",
     "",
     None,
 ])
@@ -186,8 +191,8 @@ def test_robots_allows_and_disallows(monkeypatch):
         return _FakeResp(b"User-agent: *\nDisallow: /private\n", req.full_url)
 
     monkeypatch.setattr(robots.urllib.request, "urlopen", fake_urlopen)
-    assert robots.can_fetch("https://www.naukri.com/jobs")
-    assert not robots.can_fetch("https://www.naukri.com/private/x")
+    assert robots.can_fetch("https://www.themuse.com/jobs")
+    assert not robots.can_fetch("https://www.themuse.com/private/x")
     assert len(calls) == 1  # cached per host
     assert calls[0][1] <= 10
 
@@ -197,7 +202,7 @@ def test_robots_fails_closed_on_network_error(monkeypatch):
         raise URLError("down")
 
     monkeypatch.setattr(robots.urllib.request, "urlopen", boom)
-    assert robots.can_fetch("https://www.indeed.com/jobs") is False
+    assert robots.can_fetch("https://www.themuse.com/jobs") is False
 
 
 @pytest.mark.parametrize("code,expected", [(404, True), (403, False), (500, False), (429, False)])
@@ -217,17 +222,17 @@ def test_robots_rejects_non_allowlisted_without_fetch(monkeypatch):
 def test_robots_redirect_off_allowlist_fails_closed(monkeypatch):
     monkeypatch.setattr(robots.urllib.request, "urlopen",
                         lambda req, timeout: _FakeResp(b"User-agent: *\nAllow: /\n", "http://evil.com/robots.txt"))
-    assert robots.can_fetch("https://www.linkedin.com/jobs") is False
+    assert robots.can_fetch("https://www.arbeitnow.com/jobs") is False
 
 
 # ---------- rate limit ----------
 
 def test_rate_limiter_sync_spacing():
     rl = RateLimiter(0.05)
-    start = time.monotonic()
+    start = time.perf_counter()
     for _ in range(3):
         rl.wait()
-    assert time.monotonic() - start >= 0.08  # two 0.05 s gaps, minus Windows' ~16 ms clock tick
+    assert time.perf_counter() - start >= 0.1 - 1e-4  # two 0.05 s gaps
 
 
 def test_rate_limiter_thread_safe():
@@ -238,29 +243,48 @@ def test_rate_limiter_thread_safe():
     def worker():
         rl.wait()
         with lock:
-            stamps.append(time.monotonic())
+            stamps.append(time.perf_counter())
 
     threads = [threading.Thread(target=worker) for _ in range(4)]
-    start = time.monotonic()
+    start = time.perf_counter()
     for t in threads:
         t.start()
     for t in threads:
         t.join()
     stamps.sort()
-    # The i-th caller may not run before its reserved slot. Checking against slots (not
-    # gaps between wake-ups) keeps this stable with Windows' coarse sleep timer.
-    assert all(stamp - start >= i * 0.03 - 0.001 for i, stamp in enumerate(stamps))
+    # The i-th caller may not run before its reserved slot. The limiter and this test both use
+    # perf_counter: time.monotonic() only ticks every 15.6 ms on Windows, which made this flaky.
+    assert all(stamp - start >= i * 0.03 - 1e-4 for i, stamp in enumerate(stamps))
+
+
+def test_rate_limiter_wakes_early_sleep_back_up(monkeypatch):
+    """If the OS wakes the thread early, the limiter sleeps again instead of going early."""
+    import security.rate_limit as rate_limit
+
+    clock = [100.0]
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(round(seconds, 3))
+        clock[0] += seconds * 0.5  # wake up halfway
+
+    monkeypatch.setattr(rate_limit, "_clock", lambda: clock[0])
+    monkeypatch.setattr(rate_limit.time, "sleep", fake_sleep)
+    rl = rate_limit.RateLimiter(1.0)
+    rl.wait()                      # first turn: no wait
+    rl.wait()                      # second turn: due at 101.0
+    assert clock[0] >= 101.0 - 1e-9 and sleeps[:2] == [1.0, 0.5] and len(sleeps) > 2
 
 
 def test_rate_limiter_async():
     rl = RateLimiter(0.05)
 
     async def run():
-        start = time.monotonic()
+        start = time.perf_counter()
         await asyncio.gather(*(rl.await_turn() for _ in range(3)))
-        return time.monotonic() - start
+        return time.perf_counter() - start
 
-    assert asyncio.run(run()) >= 0.08  # two 0.05 s gaps, minus Windows' ~16 ms clock tick
+    assert asyncio.run(run()) >= 0.1 - 1e-4  # two 0.05 s gaps
 
 
 def test_rate_limiter_rejects_negative():

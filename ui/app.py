@@ -465,14 +465,9 @@ def tab_scrape(settings) -> None:
         sources = st.multiselect(
             "Sources", options=list(c.SOURCES), default=c.DEFAULT_SOURCES, format_func=c.source_name,
             key="scrape_sources",
-            help="RemoteOK, Hacker News, The Muse and Arbeitnow are free public APIs. Greenhouse and Lever "
-                 "read the company boards named in .env. Indeed, LinkedIn and Naukri are experimental and "
-                 "usually return nothing.")
+            help="All are free public APIs. Himalayas lists remote jobs open to your country. Greenhouse "
+                 "and Lever read the company career boards named in .env.")
         submitted = st.form_submit_button("Find jobs", type="primary")
-
-    if any(s in sources for s in ("indeed", "linkedin", "naukri")):
-        st.caption("Playwright sources run a headless browser slowly and politely; they "
-                   "return nothing if Playwright isn't installed or robots.txt disallows them.")
 
     if submitted:
         if not keywords.strip():

@@ -1,6 +1,4 @@
-import asyncio
 import json
-import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -9,9 +7,6 @@ import requests
 
 from scraper import net
 from scraper import hn_scraper, remoteok_scraper, service
-from scraper.indeed_scraper import build_url as indeed_url, parse_indeed_html, scrape_indeed
-from scraper.linkedin_scraper import parse_linkedin_html
-from scraper.naukri_scraper import build_url as naukri_url, parse_naukri_html
 from scraper.normalizer import (
     extract_experience_years,
     html_to_text,
@@ -180,48 +175,6 @@ def test_fetch_hn_no_story(monkeypatch):
     assert hn_scraper.fetch_hn_whos_hiring("python") == []
 
 
-# ---------------------------------------------------------------- Playwright scrapers
-INDEED_HTML = """
-<div class="job_seen_beacon"><h2 class="jobTitle"><a class="jcs-JobTitle" href="/rc/clk?jk=abc">
-<span title="Python Developer">Python Developer</span></a></h2>
-<span data-testid="company-name">Acme</span><div data-testid="text-location">Remote</div>
-<div class="job-snippet"><ul><li>3+ years Python</li></ul></div></div>
-<div class="job_seen_beacon"><h2 class="jobTitle"></h2></div>
-"""
-
-LINKEDIN_HTML = """
-<div class="base-card base-search-card"><a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/123?trk=x"></a>
-<h3 class="base-search-card__title">Data Scientist</h3><h4 class="base-search-card__subtitle">Globex</h4>
-<span class="job-search-card__location">Berlin</span><time datetime="2026-09-20">1 week ago</time></div>
-"""
-
-NAUKRI_HTML = """
-<div class="srp-jobtuple-wrapper"><a class="title" href="https://www.naukri.com/job-listings-1">Backend Developer</a>
-<a class="comp-name">Initech</a><span class="expwdth">2-5 Yrs</span><span class="locWdth">Bengaluru</span>
-<span class="job-desc">Java, Spring Boot</span><span class="job-post-day">3 Days Ago</span></div>
-"""
-
-
-def test_parse_indeed_html():
-    jobs = parse_indeed_html(INDEED_HTML)
-    assert len(jobs) == 1
-    j = jobs[0]
-    assert (j["title"], j["company"], j["location"], j["source"]) == ("Python Developer", "Acme", "Remote", "indeed")
-    assert j["url"] == "https://www.indeed.com/viewjob?jk=abc"  # canonical, no tracking params
-    assert j["experience_years"] == 3
-
-
-def test_parse_indeed_html_dedupes_nested_cards_and_tracking_urls():
-    card = ('<div class="job_seen_beacon"><h2 class="jobTitle"><a class="jcs-JobTitle" href="{}">'
-            '<span title="Python Developer">Python Developer</span></a></h2></div>')
-    html = ('<ul class="jobsearch-ResultsList"><li class="result">'
-            + card.format("/rc/clk?jk=abc&amp;bb=track1") + "</li></ul>"
-            + card.format("/pagead/clk?jk=abc&amp;xkcb=track2") + card.format("/rc/clk?jk=def"))
-    assert [j["url"] for j in parse_indeed_html(html)] == [
-        "https://www.indeed.com/viewjob?jk=abc", "https://www.indeed.com/viewjob?jk=def"]
-    assert len(parse_indeed_html(html, max_jobs=1)) == 1
-
-
 def test_parse_hn_comment_header_with_links_and_no_role():
     job = hn_scraper.parse_hn_comment({"objectID": "1", "created_at_i": 1790000000, "comment_text": (
         'GovStar | <a href="https:&#x2F;&#x2F;govstar.example">https:&#x2F;&#x2F;govstar.example</a> | '
@@ -233,39 +186,6 @@ def test_parse_hn_comment_header_with_links_and_no_role():
     # A candidate's "who wants to be hired" style post is not a job.
     assert hn_scraper.parse_hn_comment({"objectID": "3", "comment_text": (
         "Location: London, UK<p>Remote: Yes<p>Willing to relocate: No<p>Technologies: Python")}) is None
-
-
-def test_parse_linkedin_html():
-    (j,) = parse_linkedin_html(LINKEDIN_HTML)
-    assert j["title"] == "Data Scientist" and j["company"] == "Globex"
-    assert j["url"] == "https://www.linkedin.com/jobs/view/123"
-    assert j["posted_date"] == datetime(2026, 9, 20)
-
-
-def test_parse_naukri_html():
-    (j,) = parse_naukri_html(NAUKRI_HTML)
-    assert j["title"] == "Backend Developer" and j["company"] == "Initech"
-    assert j["experience_years"] == 2 and j["location"] == "Bengaluru"
-    assert j["posted_date"] is not None
-
-
-def test_build_urls_are_encoded():
-    assert indeed_url("C++ Dev", "New York") == "https://www.indeed.com/jobs?q=C%2B%2B+Dev&l=New+York"
-    assert naukri_url("Python Developer", "Bengaluru") == "https://www.naukri.com/python-developer-jobs-in-bengaluru"
-    assert naukri_url("Python", "Remote") == "https://www.naukri.com/python-jobs"
-
-
-def test_playwright_scraper_without_playwright_returns_empty(monkeypatch):
-    # Simulate Playwright being absent (it may be installed locally) and skip the live robots check.
-    monkeypatch.setitem(sys.modules, "playwright", None)
-    monkeypatch.setitem(sys.modules, "playwright.async_api", None)
-    monkeypatch.setattr("scraper.net.check_allowed", lambda url: None)
-    assert asyncio.run(scrape_indeed("python", "remote", 5)) == []
-
-
-def test_playwright_scraper_blocked_by_robots(monkeypatch):
-    monkeypatch.setattr(net, "can_fetch", lambda url, ua="": False)
-    assert asyncio.run(scrape_indeed("python", "remote", 5)) == []
 
 
 # ---------------------------------------------------------------- service
@@ -282,9 +202,9 @@ def test_scrape_jobs_fans_out_dedupes_and_caps(monkeypatch):
     def broken(kw, loc, n):
         raise RuntimeError("boom")
 
-    fns["indeed"] = broken
+    fns["themuse"] = broken
     monkeypatch.setattr(service, "_source_fn", lambda name: fns.get(name))
-    jobs = service.scrape_jobs("python", "Remote", 10, ["remoteok", "hn", "indeed", "bogus"])
+    jobs = service.scrape_jobs("python", "Remote", 10, ["remoteok", "hn", "themuse", "bogus"])
     assert [j["title"] for j in jobs] == ["A1", "A2", "B2", "A3"]  # interleaved, deduped
 
     jobs = service.scrape_jobs("python", "Remote", 2, ["remoteok", "hn"])

@@ -6,6 +6,11 @@ import threading
 import time
 
 
+# perf_counter, not monotonic: on Windows time.monotonic() only ticks every 15.6 ms, so a
+# turn could start up to a tick early. perf_counter is monotonic too, at sub-microsecond resolution.
+_clock = time.perf_counter
+
+
 class RateLimiter:
     """Ensure at least ``min_interval`` seconds pass between successive turns."""
 
@@ -17,21 +22,21 @@ class RateLimiter:
         self._next_at = 0.0
 
     def _reserve(self) -> float:
-        """Claim the next slot and return how long the caller must sleep before using it."""
+        """Claim the next slot and return the clock time at which the caller may go."""
         with self._lock:
-            now = time.monotonic()
-            slot = max(now, self._next_at)
+            slot = max(_clock(), self._next_at)
             self._next_at = slot + self.min_interval
-            return slot - now
+            return slot
 
     def wait(self) -> None:
         """Block the current thread until it is this caller's turn."""
-        delay = self._reserve()
-        if delay > 0:
-            time.sleep(delay)
+        slot = self._reserve()
+        # Sleep can wake a little early on some platforms, so check the clock again.
+        while (remaining := slot - _clock()) > 0:
+            time.sleep(remaining)
 
     async def await_turn(self) -> None:
         """Asynchronously wait (without blocking the event loop) until it is this caller's turn."""
-        delay = self._reserve()
-        if delay > 0:
-            await asyncio.sleep(delay)
+        slot = self._reserve()
+        while (remaining := slot - _clock()) > 0:
+            await asyncio.sleep(remaining)

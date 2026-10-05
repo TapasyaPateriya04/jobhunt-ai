@@ -1,5 +1,4 @@
-# Web scraping
-playwright==1.44.0
+# Job APIs (no browser automation: sites that block bots are not scraped)
 beautifulsoup4==4.12.3
 requests==2.34.2
 
