@@ -111,10 +111,10 @@ tests/           pytest suite (no network, no heavy models needed)
 | Himalayas | `himalayas` | Free public API of remote jobs. Searches your keywords and keeps jobs open to the country in your location (e.g. "India"), including worldwide ones. On by default. |
 | Lever boards | `lever` | Companies you list in `LEVER_COMPANIES` (e.g. `palantir`). |
 
-The Muse has no keyword search and needs locations spelled its own way, separated by `;`:
-`--location "Bangalore, India; Gurgaon, India; Hyderabad, India; Pune, India"`. "Remote" (the
-default) searches its "Flexible / Remote" jobs. Entry-level software roles in India are rare
-there; most listings are mid or senior level.
+The Muse has no keyword search and its own spelling of places. "India" is expanded into its
+tech cities (your `CANDIDATE_CITIES` first), and common spellings such as Bengaluru or Gurugram are
+mapped to The Muse's names, so `--location "India"` just works. "Remote" searches its "Flexible /
+Remote" jobs. Entry-level software roles in India are rare there; most listings are mid or senior level.
 
 For Greenhouse and Lever the slug is the last part of the company's careers URL:
 `boards.greenhouse.io/<slug>` or `jobs.lever.co/<slug>`.

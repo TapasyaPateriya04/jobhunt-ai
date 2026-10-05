@@ -110,6 +110,16 @@ def test_muse_locations():
     assert muse_locations("Pune, India; remote") == ["Pune, India", "Flexible / Remote"]
 
 
+def test_muse_locations_expand_a_country_and_fix_spellings():
+    assert muse_locations("Bengaluru; Gurugram, India") == ["Bangalore, India", "Gurgaon, India"]
+    india = muse_locations("India")
+    assert india[0] == "Bangalore, India" and "Noida, India" in india and len(india) == 7
+    # With preferred cities (CANDIDATE_CITIES), only the ones The Muse knows are searched.
+    assert muse_locations("india", ("Gurugram", "Gurgaon", "Noida", "Delhi", "Bangalore")) == [
+        "Gurgaon, India", "Noida, India", "Bangalore, India"]
+    assert muse_locations("Berlin, Germany") == ["Berlin, Germany"]  # unknown places pass through
+
+
 def test_parse_muse():
     jobs = parse_muse(MUSE_PAGE, "Java Developer", 10)
     assert [j["title"] for j in jobs] == ["Java Developer", "Senior Backend Engineer (Java)"]

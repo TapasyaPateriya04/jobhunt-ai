@@ -8,7 +8,9 @@ What the API can and cannot do (checked live, 2026-09-30):
 - There is no keyword search, so we read a few pages and filter them ourselves.
 - ``location`` must be spelled exactly as The Muse does ("Bangalore, India", not "India"
   or "Bengaluru"). Any location filter also returns "Flexible / Remote" jobs, and an
-  unknown location returns only those.
+  unknown location returns only those. So a country is expanded into its cities and common
+  spellings are mapped (see ``MUSE_CITIES`` and ``_CITY_NAMES``, checked live 2026-10-05:
+  "Bengaluru, India", "Gurugram, India" and "New Delhi, India" return nothing of their own).
 - ``level`` works ("Entry Level", "Internship", ...) but entry-level software jobs in
   Indian cities are nearly absent, so it is not applied; the experience score ranks
   junior-friendly roles higher instead.
@@ -30,16 +32,43 @@ CATEGORY = "Software Engineering"
 REMOTE_LOCATION = "Flexible / Remote"
 MAX_REQUESTS = 12
 _REMOTE_WORDS = {"", "remote", "anywhere", "worldwide", "flexible", "flexible / remote"}
+# A country searched as a whole: its tech cities, as The Muse spells them, most jobs first.
+MUSE_CITIES = {
+    "india": ["Bangalore, India", "Hyderabad, India", "Chennai, India", "Pune, India",
+              "Gurgaon, India", "Mumbai, India", "Noida, India"],
+}
+# Other ways people write those cities -> The Muse's name.
+_CITY_NAMES = {
+    "bangalore": "Bangalore, India", "bengaluru": "Bangalore, India", "hyderabad": "Hyderabad, India",
+    "chennai": "Chennai, India", "pune": "Pune, India", "gurgaon": "Gurgaon, India",
+    "gurugram": "Gurgaon, India", "mumbai": "Mumbai, India", "bombay": "Mumbai, India",
+    "noida": "Noida, India",
+}
 
 
-def muse_locations(location: str) -> list[str]:
-    """Split a user location such as "Bangalore, India; Gurgaon, India" into Muse location
-    names. Remote-like or empty input becomes "Flexible / Remote"."""
+def _muse_name(place: str) -> str | None:
+    """The Muse's name for a city ("Bengaluru", "Bengaluru, India"), or None if unknown."""
+    city = place.split(",")[0].strip().lower()
+    return _CITY_NAMES.get(city)
+
+
+def muse_locations(location: str, cities=()) -> list[str]:
+    """Split a user location such as "Bangalore, India; Gurgaon" into Muse location names.
+
+    A country ("India") becomes its cities: the preferred ``cities`` (e.g. CANDIDATE_CITIES)
+    that The Muse knows, else its main tech cities. Remote-like or empty input becomes
+    "Flexible / Remote"."""
     out: list[str] = []
     for part in re.split(r"\s*[;|]\s*", location or ""):
-        name = REMOTE_LOCATION if part.strip().lower() in _REMOTE_WORDS else part.strip()
-        if name not in out:
-            out.append(name)
+        part = part.strip()
+        if part.lower() in _REMOTE_WORDS:
+            names = [REMOTE_LOCATION]
+        elif part.lower() in MUSE_CITIES:
+            preferred = [n for n in (_muse_name(c) for c in cities or ()) if n in MUSE_CITIES[part.lower()]]
+            names = preferred or MUSE_CITIES[part.lower()]
+        else:
+            names = [_muse_name(part) or part]
+        out.extend(n for n in names if n not in out)
     return out or [REMOTE_LOCATION]
 
 
@@ -76,7 +105,13 @@ def parse_muse(payload, keywords: str = "", max_jobs: int = 20) -> list[dict]:
 
 def fetch_muse(keywords, location: str = "Remote", max_jobs: int = 20) -> list[dict]:
     """Jobs matching ``keywords`` in ``location`` from The Muse. Returns [] on any failure."""
-    locations = muse_locations(location)
+    try:
+        from config import get_settings
+
+        cities = tuple(get_settings().candidate_cities)
+    except Exception:
+        cities = ()
+    locations = muse_locations(location, cities)
     pages = max(1, MAX_REQUESTS // len(locations))
     jobs: dict[str, dict] = {}
     requests_made = 0
