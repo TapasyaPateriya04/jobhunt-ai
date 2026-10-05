@@ -285,7 +285,59 @@ def test_fetch_boards_without_config_returns_empty():
 
 # ---------------------------------------------------------------- service
 def test_source_lists_are_consistent():
-    assert set(service.DEFAULT_SOURCES).isdisjoint(service.EXPERIMENTAL_SOURCES)
-    assert service.EXPERIMENTAL_SOURCES == ["indeed", "linkedin", "naukri"]
+    assert set(service.DEFAULT_SOURCES).isdisjoint(service.BOARD_SOURCES)
+    assert not {"indeed", "linkedin", "naukri"} & set(service.ALL_SOURCES)  # sites that block bots
     assert all(service._source_fn(name) is not None for name in service.ALL_SOURCES)
     assert service._source_fn("bogus") is None
+
+
+# ---------------------------------------------------------------- Himalayas
+HIMALAYAS = {"totalCount": 3, "offset": 0, "limit": 20, "jobs": [
+    {"title": "SDE I - Backend", "companyName": "Sun King", "locationRestrictions": ["India"],
+     "seniority": ["Entry-level"], "categories": ["Backend-Developer"],
+     "description": "<p>Build <b>Java</b> and Spring Boot services. 1+ years of experience.</p>",
+     "pubDate": 1791000000, "applicationLink": "https://himalayas.app/companies/sun-king/jobs/sde-i-backend-1",
+     "guid": "https://himalayas.app/companies/sun-king/jobs/sde-i-backend-1"},
+    {"title": "Java Developer", "companyName": "gravity9", "locationRestrictions": [], "seniority": ["Senior"],
+     "description": "<p>Java microservices.</p>", "pubDate": "1791000000",
+     "guid": "https://himalayas.app/companies/gravity9/jobs/java-developer-2"},
+    {"title": "Account Executive", "companyName": "Sun King", "locationRestrictions": ["India"],
+     "description": "<p>Sell solar.</p>", "pubDate": 1791000000,
+     "guid": "https://himalayas.app/companies/sun-king/jobs/ae-3"},
+]}
+
+
+def test_parse_himalayas_marks_remote_scope_and_seniority():
+    from scraper.himalayas_scraper import parse_himalayas
+
+    jobs = parse_himalayas(HIMALAYAS, "Java Developer", 10)
+    assert [j["title"] for j in jobs] == ["Java Developer", "SDE I - Backend"]  # sales role dropped
+    sde = jobs[1]
+    assert set(sde) == JOB_KEYS and sde["source"] == "himalayas"
+    assert (sde["company"], sde["location"]) == ("Sun King", "Remote (India)")
+    assert "Seniority: Entry-level" in sde["description"] and "<" not in sde["description"]
+    assert sde["url"].endswith("sde-i-backend-1") and sde["posted_date"].year == 2026
+    assert jobs[0]["location"] == "Remote (worldwide)"
+    assert parse_himalayas({"jobs": None}) == [] and parse_himalayas(None) == []
+
+
+def test_fetch_himalayas_asks_for_the_country_in_one_request(monkeypatch):
+    from scraper.himalayas_scraper import country_for, fetch_himalayas
+
+    assert [country_for(x) for x in ("Bangalore, India", "Gurgaon", "Remote", "", "Atlantis")] == [
+        "India", "India", "", "", ""]
+    calls = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append((url, dict(params)))
+        return FakeResp(HIMALAYAS)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    jobs = fetch_himalayas("Java Developer", "Bangalore, India", max_jobs=10)
+    assert len(jobs) == 2 and calls == [
+        ("https://himalayas.app/jobs/api/search", {"q": "Java Developer", "country": "India"})]  # no page=
+    calls.clear()
+    fetch_himalayas("Java Developer", "Remote", max_jobs=10)
+    assert calls[0][1] == {"q": "Java Developer"}  # worldwide
+    monkeypatch.setattr(requests, "get", lambda *a, **k: (_ for _ in ()).throw(requests.ConnectionError()))
+    assert fetch_himalayas("java", "Remote") == []

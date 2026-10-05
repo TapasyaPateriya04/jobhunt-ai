@@ -6,9 +6,6 @@ import os
 from urllib.parse import urlsplit
 
 ALLOWED_JOB_HOSTS: frozenset[str] = frozenset({
-    "indeed.com",
-    "linkedin.com",
-    "naukri.com",
     "remoteok.com",
     "remoteok.io",
     "hn.algolia.com",
@@ -17,6 +14,7 @@ ALLOWED_JOB_HOSTS: frozenset[str] = frozenset({
     "arbeitnow.com",
     "boards-api.greenhouse.io",
     "api.lever.co",
+    "himalayas.app",
 })
 LOCAL_LLM_HOSTS: frozenset[str] = frozenset({"localhost", "127.0.0.1", "::1"})
 

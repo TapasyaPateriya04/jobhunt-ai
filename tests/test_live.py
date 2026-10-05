@@ -58,13 +58,7 @@ def test_api_source_returns_normalized_jobs(source, fetch):
     "https://www.themuse.com/api/public/jobs",
     "https://boards-api.greenhouse.io/v1/boards/gitlab/jobs",
     "https://api.lever.co/v0/postings/palantir",
+    "https://himalayas.app/jobs/api/search?q=java&country=India",
 ])
 def test_api_source_still_allowed_by_robots(url):
     net.check_allowed(url)  # raises FetchBlocked if the site now disallows us
-
-
-def test_linkedin_still_blocked_by_robots():
-    # If this starts failing, LinkedIn changed its robots.txt; re-read its terms before
-    # taking the scraper out of "experimental".
-    with pytest.raises(net.FetchBlocked):
-        net.check_allowed("https://www.linkedin.com/jobs/search?keywords=python")

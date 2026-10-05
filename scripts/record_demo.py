@@ -3,7 +3,8 @@
 Usage (with the app running at http://localhost:8501, your resume uploaded and jobs scored):
   python scripts/record_demo.py [--url URL] [--out FILE]
 
-Needs Playwright's Chromium (`python -m playwright install chromium`) and ffmpeg on PATH.
+Needs Playwright (`pip install playwright`, then `python -m playwright install chromium`) and ffmpeg
+on PATH. Playwright is not in requirements.txt: only this script uses it.
 The walkthrough presses Save on one job; every status it changes is put back afterwards.
 The video shows your own resume and jobs, so it is written outside the repository
 (default: <docs_dir>/demo/jobhunt-ai-demo.mp4).

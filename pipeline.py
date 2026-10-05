@@ -26,13 +26,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="JobHunt AI: parse your resume, scrape jobs and rank matches.")
     p.add_argument("--resume", required=True, help="Path to resume (.tex, .txt, .md; .pdf if pypdf is installed)")
     p.add_argument("--keywords", default="Python Developer", help='Search keywords, e.g. "Python Developer"')
-    p.add_argument("--location", default="Remote", help='Location for The Muse, spelled its way and ";"-separated, e.g. "Bangalore, India; '
-                                        'Gurgaon, India" (also used by the experimental scrapers)')
+    p.add_argument("--location", default="Remote", help='Location, ";"-separated, e.g. "Bangalore, India; '
+                                        'Gurgaon, India" (The Muse needs its own spelling)')
     p.add_argument("--max-jobs", type=int, default=20, help="Max jobs to scrape (capped by MAX_JOBS_PER_SESSION)")
-    p.add_argument("--sources", default="remoteok,hn,themuse,arbeitnow",
-                   help="Comma-separated sources: remoteok,hn,themuse,arbeitnow,greenhouse,lever "
-                        "(greenhouse/lever need GREENHOUSE_BOARDS/LEVER_COMPANIES in .env); "
-                        "experimental, usually blocked: indeed,linkedin,naukri")
+    p.add_argument("--sources", default="remoteok,hn,themuse,arbeitnow,himalayas",
+                   help="Comma-separated sources: remoteok,hn,themuse,arbeitnow,himalayas,greenhouse,lever "
+                        "(greenhouse/lever need GREENHOUSE_BOARDS/LEVER_COMPANIES in .env)")
     p.add_argument("--top", type=int, default=20, help="Rows to show in the results table")
     p.add_argument("--country", default=None,
                    help="Your home country; jobs you cannot take are ranked down "

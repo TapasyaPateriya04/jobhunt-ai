@@ -32,21 +32,17 @@ SOURCES = {
     "arbeitnow": "Arbeitnow (free public API, mostly Europe)",
     "greenhouse": "Greenhouse company boards (set GREENHOUSE_BOARDS in .env)",
     "lever": "Lever company boards (set LEVER_COMPANIES in .env)",
-    "indeed": "Indeed (experimental: needs Playwright, check ToS)",
-    "linkedin": "LinkedIn (experimental: blocked by robots.txt)",
-    "naukri": "Naukri (experimental: blocks automated browsers)",
+    "himalayas": "Himalayas (free public API, remote jobs open to your country)",
 }
-DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow"]
-EXPERIMENTAL_SOURCES = ["indeed", "linkedin", "naukri"]
+DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow", "himalayas"]
 
 ETHICAL_NOTE = (
-    "**Scrape responsibly.** Prefer official/free APIs (RemoteOK, HN Who's Hiring, The Muse, "
-    "Arbeitnow, Greenhouse and Lever company boards). For HTML portals the scraper checks "
-    "`robots.txt` and skips disallowed sites, waits 3-5 s between requests, caps each "
-    "session at 20-50 jobs, and caches results so the same job is never re-scraped. "
-    "Indeed, LinkedIn and Naukri are **experimental**: they restrict automated access, "
-    "usually return nothing, and are for personal learning only. Read each site's Terms "
-    "of Service before enabling them."
+    "**Only official, free job APIs.** RemoteOK, HN Who's Hiring, The Muse, Arbeitnow, Himalayas "
+    "and the Greenhouse and Lever company boards all publish their jobs for programs to read. Before "
+    "every request the app checks the site's `robots.txt` and skips any site that disallows it, "
+    "waits 3-5 s between requests, caps each session at 20-50 jobs and stores results so the same "
+    "job is never fetched twice. Sites that block automated access (Naukri, LinkedIn, Indeed) are "
+    "not used."
 )
 
 LLM_HELP = (

@@ -99,33 +99,38 @@ def test_validate_upload_accepts_ext_without_dot():
 # ---------- url_guard ----------
 
 @pytest.mark.parametrize("url", [
-    "https://www.indeed.com/jobs?q=python",
-    "https://in.indeed.com/viewjob?jk=1",
-    "https://www.linkedin.com/jobs/view/1",
-    "https://www.naukri.com/python-jobs",
+    "https://www.themuse.com/api/public/jobs",
+    "https://api.lever.co/v0/postings/x",
+    "https://himalayas.app/jobs/api/search?q=java",
     "https://remoteok.com/api",
     "https://hn.algolia.com/api/v1/search?query=hiring",
     "https://news.ycombinator.com/item?id=1",
-    "http://WWW.Indeed.COM./jobs",
+    "http://WWW.RemoteOK.COM./api",
 ])
 def test_allowed_urls(url):
     assert is_allowed_url(url)
 
 
+@pytest.mark.parametrize("url", ["https://www.indeed.com/jobs", "https://www.linkedin.com/jobs/view/1",
+                                 "https://www.naukri.com/python-jobs"])
+def test_sites_that_block_bots_are_not_allowlisted(url):
+    assert not is_allowed_url(url)
+
+
 @pytest.mark.parametrize("url", [
-    "ftp://indeed.com/x",
+    "ftp://remoteok.com/x",
     "file:///etc/passwd",
     "javascript:alert(1)",
-    "https://evil.com/?indeed.com",
-    "https://indeed.com.evil.com/",
-    "https://notindeed.com/",
-    "https://user:pw@indeed.com/",
-    "https://evil.com@indeed.com/",  # credentials present -> rejected
+    "https://evil.com/?remoteok.com",
+    "https://remoteok.com.evil.com/",
+    "https://notremoteok.com/",
+    "https://user:pw@remoteok.com/",
+    "https://evil.com@remoteok.com/",  # credentials present -> rejected
     "http://127.0.0.1/",
     "http://169.254.169.254/latest/meta-data",
     "http://localhost:11434/",
-    "https://indeed.com:99999/",
-    "https://indeed.com/\r\nHost: evil",
+    "https://remoteok.com:99999/",
+    "https://remoteok.com/\r\nHost: evil",
     "",
     None,
 ])
@@ -186,8 +191,8 @@ def test_robots_allows_and_disallows(monkeypatch):
         return _FakeResp(b"User-agent: *\nDisallow: /private\n", req.full_url)
 
     monkeypatch.setattr(robots.urllib.request, "urlopen", fake_urlopen)
-    assert robots.can_fetch("https://www.naukri.com/jobs")
-    assert not robots.can_fetch("https://www.naukri.com/private/x")
+    assert robots.can_fetch("https://www.themuse.com/jobs")
+    assert not robots.can_fetch("https://www.themuse.com/private/x")
     assert len(calls) == 1  # cached per host
     assert calls[0][1] <= 10
 
@@ -197,7 +202,7 @@ def test_robots_fails_closed_on_network_error(monkeypatch):
         raise URLError("down")
 
     monkeypatch.setattr(robots.urllib.request, "urlopen", boom)
-    assert robots.can_fetch("https://www.indeed.com/jobs") is False
+    assert robots.can_fetch("https://www.themuse.com/jobs") is False
 
 
 @pytest.mark.parametrize("code,expected", [(404, True), (403, False), (500, False), (429, False)])
@@ -217,7 +222,7 @@ def test_robots_rejects_non_allowlisted_without_fetch(monkeypatch):
 def test_robots_redirect_off_allowlist_fails_closed(monkeypatch):
     monkeypatch.setattr(robots.urllib.request, "urlopen",
                         lambda req, timeout: _FakeResp(b"User-agent: *\nAllow: /\n", "http://evil.com/robots.txt"))
-    assert robots.can_fetch("https://www.linkedin.com/jobs") is False
+    assert robots.can_fetch("https://www.arbeitnow.com/jobs") is False
 
 
 # ---------- rate limit ----------
