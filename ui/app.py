@@ -272,7 +272,7 @@ def tab_resume(settings) -> None:
                     st.session_state["resume"] = resume
                     st.session_state["resume_fingerprint"] = fingerprint
                     found = f"{len(c.as_list(g(resume, 'skills', default=[])))} skills found"
-                    scored = _rescore_after_upload(resume, settings)
+                    scored = _score_stored(resume, settings, "Scoring your stored jobs against this resume...")
                     if scored:
                         st.session_state.pop("skills_changed", None)
                         tail = f"{scored} stored jobs were scored against it, so **Matches** is up to date."
@@ -307,13 +307,14 @@ def _home_country(settings) -> str:
         return ""
 
 
-def _rescore_after_upload(resume: dict, settings) -> int | None:
-    """Score every stored job against a newly uploaded resume. Returns how many were scored,
-    0 when there are no jobs yet, or None when scoring failed (the upload itself is kept)."""
-    if g(resume, "id") is None or not int(db_counts().get("Jobs", 0) or 0):
+def _score_stored(resume: dict | None, settings, label: str) -> int | None:
+    """Score every stored job against ``resume`` with a progress box (after an upload or a
+    search). Returns how many were scored, 0 when there is nothing to score, or None when
+    scoring failed (whatever triggered it is kept)."""
+    if not resume or g(resume, "id") is None or not int(db_counts().get("Jobs", 0) or 0):
         return 0
     try:
-        with st.status("Scoring your stored jobs against this resume...", expanded=True) as box:
+        with st.status(label, expanded=True) as box:
             bar = st.progress(0.0, text="Reading stored jobs")
             n = _score_and_save(resume, _home_country(settings),
                                 tuple(getattr(settings, "candidate_cities", ()) or ()),
@@ -321,8 +322,26 @@ def _rescore_after_upload(resume: dict, settings) -> int | None:
             box.update(label=f"Scored {n} jobs", state="complete", expanded=False)
         return n
     except Exception:
-        c.log.exception("scoring after upload failed")
+        c.log.exception("scoring stored jobs failed")
         return None
+
+
+LANGUAGES = ("Java", "Python", "JavaScript", "TypeScript", "Go", "Kotlin", "C#", "C++", "Ruby", "PHP",
+             "Rust", "Scala", "Swift", "Dart")
+
+
+def suggested_keywords(resume: dict | None) -> str:
+    """A first search from the resume: its first programming language plus "Developer"."""
+    skills = [str(s) for s in c.as_list(g(resume or {}, "skills", default=[]))]
+    lowered = {s.lower(): s for s in skills}
+    for skill in skills:
+        if skill in LANGUAGES:
+            return f"{skill} Developer"
+    return next((f"{lang} Developer" for lang in LANGUAGES if lang.lower() in lowered), "Software Engineer")
+
+
+def suggested_location(settings) -> str:
+    return str(getattr(settings, "candidate_country", "") or "").strip() or "Remote"
 
 
 def _store_upload(settings, filename: str, data: bytes) -> str:
@@ -457,10 +476,14 @@ def tab_scrape(settings) -> None:
     cap = int(getattr(settings, "max_jobs_per_session", 50) or 50)
     with st.form("scrape_form"):
         col1, col2 = st.columns(2)
-        keywords = col1.text_input("Job keywords", "Python Developer", key="scrape_keywords",
-                                   placeholder="e.g. Java Developer, Backend Engineer")
-        location = col2.text_input("Location", "Remote", key="scrape_location",
-                                   placeholder="e.g. Remote, or Bangalore, India")
+        keywords = col1.text_input("Job keywords", suggested_keywords(current_resume()), key="scrape_keywords",
+                                   placeholder="e.g. Java Developer, Backend Engineer",
+                                   help="Starts with the main language on your resume.")
+        location = col2.text_input("Location", suggested_location(settings), key="scrape_location",
+                                   placeholder="e.g. Remote, or Bangalore, India",
+                                   help="Starts with CANDIDATE_COUNTRY from .env. Himalayas and the company "
+                                        "boards keep jobs in this place; The Muse needs its own spelling, "
+                                        "e.g. \"Bangalore, India\".")
         max_jobs = st.slider("Max jobs to scrape", 5, max(5, min(50, cap)), min(20, cap), key="scrape_max")
         sources = st.multiselect(
             "Sources", options=list(c.SOURCES), default=c.DEFAULT_SOURCES, format_func=c.source_name,
@@ -488,8 +511,15 @@ def tab_scrape(settings) -> None:
                     for job in jobs:
                         per[c.source_name(job.get("source"))] = per.get(c.source_name(job.get("source")), 0) + 1
                     split = ", ".join(f"{n} from {name}" for name, n in sorted(per.items(), key=lambda x: -x[1]))
-                    st.success(f"Collected {len(jobs)} jobs ({split}); {new} are new. "
-                               "Open **Matches** and press **Score stored jobs** to rank them.")
+                    scored = _score_stored(current_resume(), settings, "Scoring the jobs against your resume...")
+                    if scored:
+                        st.session_state.pop("skills_changed", None)
+                        tail = f"All {scored} stored jobs are scored; open **Matches** to see the best ones."
+                    elif scored is None:
+                        tail = "Scoring failed; press **Score stored jobs** on the Matches tab."
+                    else:
+                        tail = "Upload your resume on the Resume tab to score them."
+                    st.success(f"Collected {len(jobs)} jobs ({split}); {new} are new. {tail}")
                 else:
                     st.warning("No jobs found. Try broader keywords, a different location or another source.")
 
