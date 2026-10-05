@@ -120,17 +120,26 @@ _GERMAN_WORDS_RE = re.compile(r"\b(und|für|mit|wir|sie|der|die|das|eine|ist|bei
 _ENGLISH_OK_RE = re.compile(r"\b(?:english[- ]speaking|working language is english|no german (?:required|needed))\b", re.I)
 
 
+# One compiled pattern per country (any of its names, as a whole word), built once. Compiling
+# a pattern per name on every call cost ~20 ms per job, most of the Matches tab's redraw time.
+_PLACE_RES = {
+    country: re.compile(r"(?<![a-zà-ÿ])(?:" + "|".join(re.escape(n) for n in names
+                                                       if n not in ("uk", "u.s", "u.k")) + r")(?![a-zà-ÿ])")
+    for country, names in PLACES.items()
+    if any(n not in ("uk", "u.s", "u.k") for n in names)
+}
+_REGION_RES = {r: re.compile(rf"(?<![a-z]){re.escape(r)}(?![a-z])") for r in REGIONS}
+
+
 def _places(text: str) -> tuple[set[str], set[str]]:
     """Countries and region words named in ``text``."""
     low = " " + (text or "").lower() + " "
-    countries = {c for c, names in PLACES.items()
-                 if any(re.search(rf"(?<![a-zà-ÿ]){re.escape(n)}(?![a-zà-ÿ])", low) for n in names
-                        if n not in ("uk", "u.s", "u.k"))}
+    countries = {c for c, pattern in _PLACE_RES.items() if pattern.search(low)}
     if _US_TOKEN_RE.search(text or "") or _US_STATE_RE.search(text or "") or re.search(r"\bu\.s\.", low):
         countries.add("United States")
     if _UK_TOKEN_RE.search(text or "") or "u.k" in low:
         countries.add("United Kingdom")
-    regions = {r for r in REGIONS if re.search(rf"(?<![a-z]){re.escape(r)}(?![a-z])", low)
+    regions = {r for r, pattern in _REGION_RES.items() if pattern.search(low)
                and (r != "eu" or re.search(r"(?<![A-Za-z])EU(?![A-Za-z])", text or ""))}
     return countries, regions
 

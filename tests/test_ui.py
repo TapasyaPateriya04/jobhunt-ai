@@ -539,3 +539,22 @@ def test_draft_with_invented_claims_gets_a_warning(ui_env):
     _assert_clean(at)
     (warning,) = [w.value for w in at.warning if "before you send this" in w.value]
     assert "Check 1 sentence" in warning and "seasoned" in warning and "8 years" in warning
+
+
+def test_find_jobs_starts_from_the_resume_and_scores_what_it_finds(ui_env, monkeypatch):
+    pytest.importorskip("matching.confidence_score")
+    import scraper.service as service
+    from db import repository as repo
+
+    monkeypatch.setenv("CANDIDATE_COUNTRY", "India")
+    rid = repo.save_resume({**RESUME, "skills": ["SQL", "Java", "Python"]}, "resume.txt")
+    found = {**JOB, "title": "Java Developer", "url": "https://remoteok.com/remote-jobs/99"}
+    monkeypatch.setattr(service, "scrape_jobs", lambda kw, loc, n, sources: [found])
+    at = _run()
+    _assert_clean(at)
+    assert at.text_input(key="scrape_keywords").value == "Java Developer"   # first language on the resume
+    assert at.text_input(key="scrape_location").value == "India"
+    next(b for b in at.button if b.label == "Find jobs").click().run()
+    _assert_clean(at)
+    assert len(repo.list_matches(rid)) == 1                                  # scored without pressing anything
+    assert any("All 1 stored jobs are scored" in s.value for s in at.success)

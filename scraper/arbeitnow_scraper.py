@@ -4,6 +4,8 @@ API: GET https://www.arbeitnow.com/api/job-board-api -> {"data": [...], "links":
 """
 from __future__ import annotations
 
+import re
+
 import requests
 from loguru import logger
 
@@ -12,6 +14,12 @@ from scraper.normalizer import html_to_text, normalize_job
 from scraper.relevance import select_relevant
 
 API_URL = "https://www.arbeitnow.com/api/job-board-api"
+
+
+def canonical_url(url: str) -> str:
+    """Arbeitnow serves the same job on country sites (arbeitnow.fr, .ch, .co.uk, ...); use the
+    .com address so one job is stored once."""
+    return re.sub(r"^https?://(?:www\.)?arbeitnow\.[a-z.]+/", "https://www.arbeitnow.com/", str(url or ""))
 
 
 def _tags(job: dict) -> list[str]:
@@ -38,7 +46,7 @@ def parse_arbeitnow(payload, keywords: str = "", max_jobs: int = 20) -> list[dic
             "company": job.get("company_name"),
             "location": location,
             "description": desc,
-            "url": job.get("url") or "",
+            "url": canonical_url(job.get("url") or ""),
             "posted_date": job.get("created_at"),
         }, "arbeitnow"))
     return out
