@@ -637,14 +637,15 @@ SORTS = ("Best match", "Fewest missing skills", "Newest posting", "Least experie
 def _annotate(matches: list[dict], resume: dict, country: str, cities: tuple) -> float:
     """Attach location fit, years asked and the skill gap to each match (cheap rules,
     recomputed on the fly so no database change is needed). Returns the candidate's years."""
-    fit = load("matching.location", "location_fit")
     labels = load("matching.location", "LABELS")
     cs = load("matching.confidence_score")
     gaps = load("matching.skill_gap")
     have = gaps.candidate_skills(resume)
     for m in matches:
         try:
-            loc = fit(m, country, cities) if country else None
+            loc = _cached_fit(str(g(m, "title", default="") or ""), str(g(m, "location", default="") or ""),
+                              str(g(m, "description", default="") or ""), str(g(m, "source", default="") or ""),
+                              country, tuple(cities)) if country else None
             m["_loc_status"] = loc["status"] if loc else ""
             m["_loc_text"] = f"{labels[loc['status']]}: {loc['reason']}" if loc else ""
             m["_years"] = cs.required_years_for(m)
@@ -658,6 +659,13 @@ def _annotate(matches: list[dict], resume: dict, country: str, cities: tuple) ->
         return float(cs.estimate_candidate_years(c.as_list(g(resume, "experience", default=[]))))
     except Exception:
         return 0.0
+
+
+@st.cache_data(show_spinner=False, max_entries=4096)
+def _cached_fit(title: str, location: str, description: str, source: str, country: str, cities: tuple) -> dict:
+    """Location fit is the slowest per-job rule (~20 ms), so compute it once per job, not per click."""
+    return load("matching.location", "location_fit")(
+        {"title": title, "location": location, "description": description, "source": source}, country, cities)
 
 
 @st.cache_data(show_spinner=False, max_entries=2048)

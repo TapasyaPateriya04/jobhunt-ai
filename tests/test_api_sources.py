@@ -341,3 +341,12 @@ def test_fetch_himalayas_asks_for_the_country_in_one_request(monkeypatch):
     assert calls[0][1] == {"q": "Java Developer"}  # worldwide
     monkeypatch.setattr(requests, "get", lambda *a, **k: (_ for _ in ()).throw(requests.ConnectionError()))
     assert fetch_himalayas("java", "Remote") == []
+
+
+def test_arbeitnow_country_sites_map_to_one_url():
+    from scraper.arbeitnow_scraper import canonical_url
+
+    urls = ["https://www.arbeitnow.fr/jobs/companies/x/role-1", "https://www.arbeitnow.ch/jobs/companies/x/role-1",
+            "https://arbeitnow.co.uk/jobs/companies/x/role-1", "https://www.arbeitnow.com/jobs/companies/x/role-1"]
+    assert {canonical_url(u) for u in urls} == {"https://www.arbeitnow.com/jobs/companies/x/role-1"}
+    assert canonical_url("https://evil.example/arbeitnow.fr/x") == "https://evil.example/arbeitnow.fr/x"
