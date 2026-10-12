@@ -296,7 +296,10 @@ def test_fetch_boards_without_config_returns_empty():
 # ---------------------------------------------------------------- service
 def test_source_lists_are_consistent():
     assert set(service.DEFAULT_SOURCES).isdisjoint(service.BOARD_SOURCES)
-    assert not {"indeed", "linkedin", "naukri"} & set(service.ALL_SOURCES)  # sites that block bots
+    # Sites that block bots are never searched by default; LinkedIn and Naukri only via opt-in JobSpy.
+    assert "indeed" not in service.ALL_SOURCES
+    assert not {"linkedin", "naukri"} & set(service.DEFAULT_SOURCES + service.BOARD_SOURCES)
+    assert set(service.JOBSPY_SOURCES) == {"linkedin", "naukri"}
     assert all(service._source_fn(name) is not None for name in service.ALL_SOURCES)
     assert service._source_fn("bogus") is None
 

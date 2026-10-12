@@ -1,6 +1,7 @@
 """Smoke tests for the Streamlit dashboard using streamlit.testing.v1.AppTest."""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -558,3 +559,62 @@ def test_find_jobs_starts_from_the_resume_and_scores_what_it_finds(ui_env, monke
     _assert_clean(at)
     assert len(repo.list_matches(rid)) == 1                                  # scored without pressing anything
     assert any("All 1 stored jobs are scored" in s.value for s in at.success)
+
+
+def test_paste_a_linkedin_job_stores_and_scores_it(ui_env):
+    from db import repository as repo
+
+    _seed()
+    at = _run()
+    at.text_input(key="add_job_url").input("https://www.linkedin.com/jobs/view/4012345678/?trk=x")
+    at.text_area(key="add_job_text").input(
+        "Java Developer\nAcme · Bengaluru, India · 1 day ago\nAbout the job\nJava, Spring Boot and React.")
+    next(b for b in at.button if b.label == "Add job").click().run()
+    _assert_clean(at)
+    jobs = [j for j in repo.list_jobs(limit=50) if j["source"] == "linkedin"]
+    assert len(jobs) == 1 and jobs[0]["company"] == "Acme" and jobs[0]["location"] == "Bengaluru, India"
+    assert jobs[0]["url"] == "https://www.linkedin.com/jobs/view/4012345678/"
+    assert any("Added **Java Developer** at **Acme**" in s.value for s in at.success)
+
+
+def test_add_job_needs_pasted_text(ui_env):
+    at = _run()
+    next(b for b in at.button if b.label == "Add job").click().run()
+    _assert_clean(at)
+    assert any("Paste the job posting first" in w.value for w in at.warning)
+
+
+def test_jobspy_sites_hidden_unless_enabled(ui_env):
+    at = _run()
+    _assert_clean(at)
+    assert "linkedin" not in at.multiselect(key="scrape_sources").options
+    assert not [t for t in at.toggle if t.key == "jobspy_auto"]
+
+
+def test_jobspy_auto_refresh_adds_jobs_once(ui_env, monkeypatch, tmp_path):
+    import types
+
+    from db import repository as repo
+
+    calls = []
+
+    def scrape_jobs(**kw):
+        import pandas as pd
+
+        calls.append(kw)
+        return pd.DataFrame([{"title": "Java Developer", "company": "Acme", "location": "Bengaluru",
+                              "date_posted": None, "job_url": "https://www.linkedin.com/jobs/view/4012345678",
+                              "description": "Java and Spring Boot."}])
+
+    monkeypatch.setitem(sys.modules, "jobspy", types.SimpleNamespace(scrape_jobs=scrape_jobs))
+    monkeypatch.setenv("JOBSPY_SITES", "linkedin")
+    _seed()
+    at = _run()
+    _assert_clean(at)
+    assert at.toggle(key="jobspy_auto").value is True
+    assert "linkedin" in at.multiselect(key="scrape_sources").value
+    assert len(calls) == 1 and calls[0]["site_name"] == ["linkedin"]
+    assert any(j["source"] == "linkedin" for j in repo.list_jobs(limit=50))
+    at.run()  # any rerun within the hour must not search again
+    _assert_clean(at)
+    assert len(calls) == 1

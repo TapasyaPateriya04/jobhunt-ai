@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -485,11 +486,15 @@ def tab_scrape(settings) -> None:
                                         "boards keep jobs in this place; The Muse needs its own spelling, "
                                         "e.g. \"Bangalore, India\".")
         max_jobs = st.slider("Max jobs to scrape", 5, max(5, min(50, cap)), min(20, cap), key="scrape_max")
+        jobspy_on = [x for x in c.JOBSPY_SOURCES if x in tuple(getattr(settings, "jobspy_sites", ()) or ())]
+        options = [x for x in c.SOURCES if x not in c.JOBSPY_SOURCES or x in jobspy_on]
         sources = st.multiselect(
-            "Sources", options=list(c.SOURCES), default=c.DEFAULT_SOURCES, format_func=c.source_name,
+            "Sources", options=options, default=c.DEFAULT_SOURCES + jobspy_on, format_func=c.source_name,
             key="scrape_sources",
-            help="All are free public APIs. Himalayas lists remote jobs open to your country. Greenhouse "
-                 "and Lever read the company career boards named in .env.")
+            help="The free public APIs allow programs. Himalayas lists remote jobs open to your country. "
+                 "Greenhouse and Lever read the company career boards named in .env. LinkedIn and Naukri "
+                 "appear only when listed in JOBSPY_SITES, and are searched at most once per "
+                 "JOBSPY_REFRESH_MINUTES.")
         submitted = st.form_submit_button("Find jobs", type="primary")
 
     if submitted:
@@ -498,6 +503,9 @@ def tab_scrape(settings) -> None:
         elif not sources:
             st.warning("Pick at least one source.")
         else:
+            waiting = _jobspy_waiting(settings, sources)
+            if waiting:
+                st.info(waiting)
             names = ", ".join(c.source_name(x) for x in sources)
             with friendly_errors("scrape jobs"):
                 with st.status(f"Collecting jobs from {names}...", expanded=True) as box:
@@ -523,6 +531,9 @@ def tab_scrape(settings) -> None:
                 else:
                     st.warning("No jobs found. Try broader keywords, a different location or another source.")
 
+    _jobspy_auto_refresh(settings)
+    _add_job_yourself(settings, keywords, location)
+
     with friendly_errors("list stored jobs"):
         jobs = repo().list_jobs(limit=50)
         if not jobs:
@@ -537,6 +548,110 @@ def tab_scrape(settings) -> None:
                                                 link=True), unsafe_allow_html=True)
             _show_more("stored_jobs", len(jobs))
             _housekeeping(resume=current_resume())
+
+
+def _jobspy_waiting(settings, sources) -> str:
+    """Which picked JobSpy sites are still inside their wait, as a sentence ('' when none)."""
+    try:
+        js = load("scraper.jobspy_source")
+    except FeatureUnavailable:
+        return ""
+    waits = [(c.source_name(x), js.wait_seconds(x, settings)) for x in sources if x in c.JOBSPY_SOURCES]
+    waits = [(name, w) for name, w in waits if w > 0]
+    if not waits:
+        return ""
+    parts = ", ".join(f"{name} in {max(1, round(w / 60))} min" for name, w in waits)
+    return f"Skipping sites searched recently, to avoid being blocked. Next search allowed: {parts}."
+
+
+def _jobspy_refresh_now(settings) -> None:
+    """Search the enabled JobSpy sites that are due, with the last keywords and location."""
+    js = load("scraper.jobspy_source")
+    due = [x for x in js.enabled_sites(settings) if js.wait_seconds(x, settings) <= 0]
+    keywords = str(st.session_state.get("scrape_keywords") or suggested_keywords(current_resume()) or "").strip()
+    if not due or not keywords:
+        return
+    location = str(st.session_state.get("scrape_location") or suggested_location(settings) or "").strip()
+    cap = int(getattr(settings, "jobspy_results_per_site", 15) or 15)
+    jobs = load("scraper.service").dedupe_jobs(
+        [j for site in due for j in js.fetch_jobspy(site, keywords, location, cap, settings=settings)])
+    new = repo().upsert_jobs(jobs) if jobs else 0
+    if new:
+        _score_stored(current_resume(), settings, "Scoring new LinkedIn and Naukri jobs...")
+        st.toast(f"Auto-refresh: {new} new jobs from {', '.join(c.source_name(x) for x in due)}.")
+
+
+def _jobspy_auto_refresh(settings) -> None:
+    """While this page is open, search the JobSpy sites again once their wait is over."""
+    sites = tuple(getattr(settings, "jobspy_sites", ()) or ())
+    if not sites or not getattr(settings, "jobspy_auto_refresh", True):
+        return
+    minutes = int(getattr(settings, "jobspy_refresh_minutes", 60) or 60)
+    on = st.toggle(f"Refresh LinkedIn and Naukri every {minutes} min while this page is open",
+                   value=True, key="jobspy_auto",
+                   help="Uses the keywords and location above. Each site is searched at most once per "
+                        "JOBSPY_REFRESH_MINUTES, also counting searches you start yourself.")
+    if not on:
+        return
+
+    @st.fragment(run_every=f"{minutes}m")
+    def _tick() -> None:
+        with friendly_errors("refresh LinkedIn and Naukri"):
+            _jobspy_refresh_now(settings)
+            js = load("scraper.jobspy_source")
+            last = [js.last_run(x, settings) for x in js.enabled_sites(settings)]
+            last = [t for t in last if t]
+            if last:
+                at = datetime.fromtimestamp(max(last)).strftime("%H:%M")
+                st.caption(f"LinkedIn and Naukri last searched at {at}.")
+
+    _tick()
+
+
+def _add_job_yourself(settings, keywords: str, location: str) -> None:
+    """Paste a posting (LinkedIn or any site) so it is stored and scored like a collected job.
+    The app never opens the link: LinkedIn forbids automated access."""
+    manual = None
+    with friendly_errors("show Add a job yourself"):
+        manual = load("scraper.manual_job")
+    if manual is None:
+        return
+    with st.expander("Add a job yourself (LinkedIn or any other site)"):
+        st.caption("LinkedIn blocks programs from reading its pages, so the app never visits it. Open the job "
+                   "in your browser, select the whole posting, copy it and paste it here.")
+        st.link_button("Search these keywords on LinkedIn",
+                       manual.linkedin_search_url(keywords.strip(), location.strip()),
+                       help="Opens LinkedIn in a new browser tab with the keywords and location above.")
+        with st.form("add_job_form", clear_on_submit=True):
+            url = st.text_input("Job link (optional)", key="add_job_url",
+                                placeholder="https://www.linkedin.com/jobs/view/...",
+                                help="Stored so you can open the job later. The app does not visit it.")
+            text = st.text_area("Job posting", key="add_job_text", height=200,
+                                placeholder="Paste the whole posting: title, company, location and description.")
+            col1, col2, col3 = st.columns(3)
+            title = col1.text_input("Title (optional)", key="add_job_title",
+                                    help="Left empty, the first line of the posting is used.")
+            company = col2.text_input("Company (optional)", key="add_job_company",
+                                      help="Left empty, read from a line like \"Acme · Bengaluru\".")
+            where = col3.text_input("Location (optional)", key="add_job_location")
+            added = st.form_submit_button("Add job")
+    if not added:
+        return
+    if not text.strip():
+        st.warning("Paste the job posting first; the description is what your resume is scored against.")
+        return
+    with friendly_errors("add the job"):
+        job = manual.manual_job(text, url, title, company, where)
+        new = repo().upsert_jobs([job])
+        what = f"**{job['title']}** at **{job['company']}**"
+        if not new:
+            st.info(f"{what} is already stored.")
+            return
+        scored = _score_stored(current_resume(), settings, "Scoring the job against your resume...")
+        tail = ("Open **Matches** to see its score." if scored
+                else "Upload your resume on the Resume tab to score it." if scored == 0
+                else "Scoring failed; press **Score stored jobs** on the Matches tab.")
+        st.success(f"Added {what}. {tail}")
 
 
 def _housekeeping(resume: dict | None) -> None:

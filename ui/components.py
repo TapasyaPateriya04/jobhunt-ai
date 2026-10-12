@@ -33,8 +33,13 @@ SOURCES = {
     "greenhouse": "Greenhouse company boards (set GREENHOUSE_BOARDS in .env)",
     "lever": "Lever company boards (set LEVER_COMPANIES in .env)",
     "himalayas": "Himalayas (free public API, remote jobs open to your country)",
+    "linkedin": "LinkedIn (JobSpy; LinkedIn forbids scraping, at most once an hour)",
+    "naukri": "Naukri (JobSpy; Naukri forbids scraping, at most once an hour)",
 }
+JOBSPY_SOURCES = ["linkedin", "naukri"]
 DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow", "himalayas"]
+# Jobs the user pastes in themselves; never offered as something to scrape.
+ADDED_SOURCES = {"manual": "Added by you"}
 
 ETHICAL_NOTE = (
     "**Only official, free job APIs.** RemoteOK, HN Who's Hiring, The Muse, Arbeitnow, Himalayas "
@@ -42,7 +47,9 @@ ETHICAL_NOTE = (
     "every request the app checks the site's `robots.txt` and skips any site that disallows it, "
     "waits 3-5 s between requests, caps each session at 20-50 jobs and stores results so the same "
     "job is never fetched twice. Sites that block automated access (Naukri, LinkedIn, Indeed) are "
-    "not used."
+    "not used by default. Listing them in `JOBSPY_SITES` in .env is an exception you opt into: LinkedIn "
+    "and Naukri are then searched through JobSpy, with no login or proxies, at most once per "
+    "`JOBSPY_REFRESH_MINUTES` (60 by default). You can also paste a job under **Add a job yourself**."
 )
 
 LLM_HELP = (
@@ -330,7 +337,10 @@ def score_label(value: Any) -> str:
 
 
 def source_name(key: Any) -> str:
-    return SOURCES.get(str(key or ""), str(key or "")).split(" (")[0]
+    key = str(key or "")
+    if key in ADDED_SOURCES:
+        return ADDED_SOURCES[key]
+    return SOURCES.get(key, key).split(" (")[0]
 
 
 def status_name(status: Any) -> str:

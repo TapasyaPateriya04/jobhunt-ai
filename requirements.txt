@@ -1,6 +1,8 @@
 # Job APIs (no browser automation: sites that block bots are not scraped)
 beautifulsoup4==4.12.3
 requests==2.34.2
+# Optional: LinkedIn and Naukri, used only when listed in JOBSPY_SITES (both forbid scraping)
+python-jobspy==1.3.0
 
 # Resume parsing
 pylatexenc==2.10

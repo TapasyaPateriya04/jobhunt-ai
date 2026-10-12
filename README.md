@@ -110,6 +110,7 @@ tests/           pytest suite (no network, no heavy models needed)
 | Greenhouse boards | `greenhouse` | Companies you list in `GREENHOUSE_BOARDS` (e.g. `gitlab`). |
 | Himalayas | `himalayas` | Free public API of remote jobs. Searches your keywords and keeps jobs open to the country in your location (e.g. "India"), including worldwide ones. On by default. |
 | Lever boards | `lever` | Companies you list in `LEVER_COMPANIES` (e.g. `palantir`). |
+| LinkedIn, Naukri | `linkedin`, `naukri` | Opt-in exception, through [JobSpy](https://github.com/speedyapply/JobSpy): only when listed in `JOBSPY_SITES`, at most once per `JOBSPY_REFRESH_MINUTES` (60 by default). See *Ethical scraping*. |
 
 The Muse has no keyword search and its own spelling of places. "India" is expanded into its
 tech cities (your `CANDIDATE_CITIES` first), and common spellings such as Bengaluru or Gurugram are
@@ -131,7 +132,9 @@ numbers and the next step to take.
 - **Resume tab**: upload a resume, or a newer version of it (skills you added by hand carry over,
   and your stored jobs are scored against it straight away). Type skills your file doesn't
   mention into **Add a skill**. Switch between stored resumes in the sidebar.
-- **Find jobs tab**: collect postings from the sources you pick. At the bottom, **Back up or clean
+- **Find jobs tab**: collect postings from the sources you pick. **Add a job yourself** stores a
+  posting you paste (from LinkedIn or anywhere) with its link, without the app visiting it. With
+  `JOBSPY_SITES` set, a toggle refreshes LinkedIn and Naukri while the page is open. At the bottom, **Back up or clean
   up stored jobs** downloads jobs and scores as CSV and deletes postings older than a number of
   days you choose (30 by default). Jobs you saved, applied to or wrote a document for are kept.
 - **Matches tab**: search by title, company, location or skill; sliders, checkboxes and dropdowns
@@ -231,9 +234,18 @@ Prefer the official/free APIs above. Every request checks `robots.txt`, waits be
 each session is capped at 50 jobs. RemoteOK asks that you link back to the job and credit
 it as the source; the stored job URL does that.
 
-Naukri, LinkedIn and Indeed are not used. Naukri answers automated browsers with "Access Denied",
-LinkedIn's `robots.txt` disallows its job search, and Indeed sits behind bot protection; all three
-restrict scraping in their terms. Their old browser scrapers were removed rather than left to fail.
+Naukri, LinkedIn and Indeed are not used by default. Naukri answers automated browsers with "Access
+Denied", LinkedIn's `robots.txt` disallows every crawler, and Indeed sits behind bot protection; all
+three restrict scraping in their terms. Their old browser scrapers were removed rather than left to fail.
+
+The one exception is opt-in: listing `linkedin` or `naukri` in `JOBSPY_SITES` searches them through
+JobSpy, outside the robots check, on your own responsibility. Requests come from your network's IP and
+a site may answer with "429 Too Many Requests" or block it for a while; your LinkedIn account is not
+involved because nothing logs in. To keep the load low, no proxies are used, each site is searched at
+most once per `JOBSPY_REFRESH_MINUTES` (30 at least, 60 by default; the last run is kept in
+`DOCS_DIR/.jobspy_last_run.json`, so a restart does not reset the wait, and a failed run waits too),
+results are capped by `JOBSPY_RESULTS_PER_SITE` and `JOBSPY_HOURS_OLD`, and JobSpy stops a site at its
+first refused request. Without the opt-in, paste a LinkedIn posting under **Add a job yourself**.
 SmartRecruiters, Ashby and Adzuna also offer job APIs, but their `robots.txt` disallows (or will not
-serve) access for this app, so they are not used either: there are no exemptions from the robots
-check. See [SECURITY.md](SECURITY.md).
+serve) access for this app, so they are not used either: apart from the JobSpy opt-in above,
+there are no exemptions from the robots check. See [SECURITY.md](SECURITY.md).
