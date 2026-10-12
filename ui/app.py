@@ -1425,8 +1425,7 @@ def _is_llm_unavailable(exc: Exception) -> bool:
 # --------------------------------------------------------------------------- main
 
 def main() -> None:
-    st.set_page_config(page_title="JobHunt AI", page_icon="🎯", layout="wide")
-    c.inject_css()
+    c.page_setup("JobHunt AI")
     settings = get_settings()
     problem = bootstrap(str(settings.database_url))
 
@@ -1458,6 +1457,7 @@ def main() -> None:
     with overview:
         with friendly_errors("show the overview"):
             render_overview(resume)
+    c.legal_footer()
 
 
 main()
