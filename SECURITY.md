@@ -4,6 +4,9 @@ JobHunt AI is a local-first, single-user app. It still handles untrusted input (
 job posts, uploaded resumes) and a secret (the optional Gemini API key), so the controls
 below live in `security/` and `config.py`. Report issues privately to the maintainer.
 
+> Keep this current. Any change to untrusted input handling, secrets, network access or the
+> scraping rules updates this file in the same commit (see AGENTS.md). Last reviewed: 2026-10-12.
+
 ## Threat model
 
 | Threat | Where it enters | Mitigation |

@@ -2,7 +2,9 @@
 
 A local-first job hunting assistant that costs ₹0/month. It scrapes job listings, parses your resume,
 scores how well you match each job, and drafts cover letters and resume edits with a free LLM.
-Everything runs on your laptop. The full plan lives in [docs/SPEC.md](docs/SPEC.md).
+Everything runs on your laptop. The original plan is [docs/SPEC.md](docs/SPEC.md); the living
+project docs (PRD, design system, architecture, database, security, code style, testing) are
+listed in [AGENTS.md](AGENTS.md).
 
 | Layer | Tool |
 |-------|------|
@@ -148,6 +150,8 @@ numbers and the next step to take.
   **Write documents** picks the job on the Documents tab.
 - **Documents tab**: draft a cover letter or resume suggestions with the local model (or Gemini),
   edit the draft and download it as .txt, .docx or .pdf.
+- **Privacy policy and Terms**: linked from the footer of every page; they say what stays on your
+  laptop, what is sent where, and the rules for the opt-in LinkedIn and Naukri source.
 
 ### Demo video
 
