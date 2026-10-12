@@ -512,8 +512,9 @@ def test_model_picker_lists_ollama_models_and_reaches_the_generator(ui_env, monk
     monkeypatch.setattr(c, "ollama_models", lambda base: models)
     monkeypatch.setattr(c, "ollama_reachable", lambda base: True)
     used = {}
-    monkeypatch.setattr(cover_letter, "generate_cover_letter",
-                        lambda resume, job, model=None: used.setdefault("model", model) and "Dear Hiring Manager,")
+    monkeypatch.setattr(cover_letter, "stream_cover_letter",
+                        lambda resume, job, model=None: iter([used.setdefault("model", model) and "Dear Hiring ",
+                                                              "Manager,"]))
     _seed()
     at = _run()
     _assert_clean(at)
@@ -526,6 +527,24 @@ def test_model_picker_lists_ollama_models_and_reaches_the_generator(ui_env, monk
     _assert_clean(at)
     assert used["model"] == "llama3.2:3b"
     assert any("Written by llama3.2:3b" in cap.value for cap in at.caption)
+    assert next(t for t in at.text_area if t.label == "Edit before saving").value == "Dear Hiring Manager,"
+
+
+def test_generate_shows_the_real_llm_error(ui_env, monkeypatch):
+    import generator.cover_letter as cover_letter
+    from generator.llm import LLMUnavailable
+
+    def fail(resume, job, model=None):
+        raise LLMUnavailable("Ollama (qwen3.5:4b) took too long.")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(cover_letter, "stream_cover_letter", fail)
+    _seed()
+    at = _run()
+    next(b for b in at.button if b.label == "Generate").click().run()
+    _assert_clean(at)
+    warn = " ".join(w.value for w in at.warning)
+    assert "qwen3.5:4b) took too long" in warn and "ollama pull mistral" not in warn
 
 
 def test_draft_with_invented_claims_gets_a_warning(ui_env):
@@ -548,12 +567,14 @@ def test_find_jobs_starts_from_the_resume_and_scores_what_it_finds(ui_env, monke
     from db import repository as repo
 
     monkeypatch.setenv("CANDIDATE_COUNTRY", "India")
-    rid = repo.save_resume({**RESUME, "skills": ["SQL", "Java", "Python"]}, "resume.txt")
+    rid = repo.save_resume({**RESUME, "skills": ["SQL", "Python", "Java"],
+                            "raw_text": "Java developer: Java 17 services with Spring Boot; some Python."},
+                           "resume.txt")
     found = {**JOB, "title": "Java Developer", "url": "https://remoteok.com/remote-jobs/99"}
     monkeypatch.setattr(service, "scrape_jobs", lambda kw, loc, n, sources: [found])
     at = _run()
     _assert_clean(at)
-    assert at.text_input(key="scrape_keywords").value == "Java Developer"   # first language on the resume
+    assert at.text_input(key="scrape_keywords").value == "Java Developer"   # language the resume uses most
     assert at.text_input(key="scrape_location").value == "India"
     next(b for b in at.button if b.label == "Find jobs").click().run()
     _assert_clean(at)
@@ -618,3 +639,15 @@ def test_jobspy_auto_refresh_adds_jobs_once(ui_env, monkeypatch, tmp_path):
     at.run()  # any rerun within the hour must not search again
     _assert_clean(at)
     assert len(calls) == 1
+
+
+def test_default_keyword_is_the_language_the_resume_uses_most():
+    import importlib
+
+    app = importlib.import_module("ui.app")
+    resume = {"skills": ["C++", "Java", "JavaScript", "Go"],
+              "raw_text": "Skills: C++, Java, JavaScript, Go\nCars24: built Java services with Spring Boot and Go "
+                          "workers. Java 17, JavaScript UI."}
+    assert app.suggested_keywords(resume) == "Java Developer"
+    assert app.suggested_keywords({"skills": ["Figma"]}) == "Software Engineer"
+    assert app.suggested_keywords({"skills": ["C++"], "raw_text": ""}) == "C++ Developer"

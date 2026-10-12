@@ -56,3 +56,30 @@ def test_no_pill_shapes_or_gradients_in_css():
     assert "999px" not in c.CSS and "border-radius:50px" not in c.CSS
     assert "gradient(" not in c.CSS
 
+
+def test_footer_survives_pages_the_server_does_not_know(monkeypatch):
+    """Pages added while the server runs are unknown until a restart; the footer must not crash."""
+    import streamlit as st
+    from streamlit.errors import StreamlitPageNotFoundError
+
+    from ui import components as c
+
+    shown = []
+
+    def missing(path, label=None, **_):
+        raise StreamlitPageNotFoundError(page=path, main_script_directory="ui", uses_pages_directory=True)
+
+    monkeypatch.setattr(st, "page_link", missing)
+    monkeypatch.setattr(st, "markdown", lambda text, **_: shown.append(text))
+    monkeypatch.setattr(st, "divider", lambda: None)
+    monkeypatch.setattr(st, "columns", lambda spec: [_Col() for _ in spec])
+    c.legal_footer()
+    assert shown == ["[Privacy policy](/privacy)", "[Terms and conditions](/terms)"]
+
+
+class _Col:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False

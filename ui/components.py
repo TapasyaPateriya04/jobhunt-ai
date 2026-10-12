@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from typing import Any, Iterable, Iterator, Optional
 
 import streamlit as st
+from streamlit.errors import StreamlitAPIException
 
 log = logging.getLogger("jobhunt.ui")
 
@@ -43,14 +44,16 @@ DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow", "himalayas"]
 ADDED_SOURCES = {"manual": "Added by you"}
 
 ETHICAL_NOTE = (
-    "**Only official, free job APIs.** RemoteOK, HN Who's Hiring, The Muse, Arbeitnow, Himalayas "
-    "and the Greenhouse and Lever company boards all publish their jobs for programs to read. Before "
-    "every request the app checks the site's `robots.txt` and skips any site that disallows it, "
+    "**Official, free job APIs by default.** RemoteOK, HN Who's Hiring, The Muse, Arbeitnow, Himalayas "
+    "and the Greenhouse and Lever company boards publish their jobs for programs to read. For these, the "
+    "app checks the site's `robots.txt` before every request and skips the site if it disallows it, "
     "waits 3-5 s between requests, caps each session at 20-50 jobs and stores results so the same "
-    "job is never fetched twice. Sites that block automated access (Naukri, LinkedIn, Indeed) are "
-    "not used by default. Listing them in `JOBSPY_SITES` in .env is an exception you opt into: LinkedIn "
-    "and Naukri are then searched through JobSpy, with no login or proxies, at most once per "
-    "`JOBSPY_REFRESH_MINUTES` (60 by default). You can also paste a job under **Add a job yourself**."
+    "job is never fetched twice.\n\n"
+    "**LinkedIn and Naukri are an exception you opt into.** Their `robots.txt` and terms forbid "
+    "automated access, so they are off unless listed in `JOBSPY_SITES` in .env. When listed, they are "
+    "searched through the JobSpy library without the robots check, with no login or proxies, at most "
+    "once per `JOBSPY_REFRESH_MINUTES` (60 by default). Indeed is never used. You can also paste a job "
+    "under **Add a job yourself**."
 )
 
 LLM_HELP = (
@@ -246,7 +249,11 @@ def legal_footer() -> None:
     cols = st.columns([1, 1, 3])
     for col, (path, label) in zip(cols, LEGAL_PAGES):
         with col:
-            st.page_link(path, label=label)
+            try:
+                st.page_link(path, label=label)
+            except StreamlitAPIException:  # pages added while the server ran are unknown until a restart
+                slug = path.rsplit("/", 1)[-1].removesuffix(".py")
+                st.markdown(f"[{label}](/{slug})")
 
 
 # --------------------------------------------------------------------------- errors
@@ -340,7 +347,7 @@ def experience_line(item: Any) -> str:
         if not dates and (item.get("start") or item.get("end")):
             dates = f"{item.get('start') or ''} - {item.get('end') or ''}"
         head = " @ ".join(p for p in (str(title), str(org)) if p)
-        line = f"**{head}**" if head else ""
+        line = f"**{html.escape(head)}**" if head else ""
         if dates:
             line += f" <span class='jh-muted'>({html.escape(str(dates))})</span>"
         return line or html.escape(json.dumps(item)[:200])

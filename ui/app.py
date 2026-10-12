@@ -332,13 +332,23 @@ LANGUAGES = ("Java", "Python", "JavaScript", "TypeScript", "Go", "Kotlin", "C#",
 
 
 def suggested_keywords(resume: dict | None) -> str:
-    """A first search from the resume: its first programming language plus "Developer"."""
+    """A first search from the resume: the programming language it mentions most, plus "Developer".
+    Counting mentions (not taking the first skill listed) keeps a language named once in a skills
+    list, e.g. C++, from beating the one used in every job on the resume."""
     skills = [str(s) for s in c.as_list(g(resume or {}, "skills", default=[]))]
-    lowered = {s.lower(): s for s in skills}
-    for skill in skills:
-        if skill in LANGUAGES:
-            return f"{skill} Developer"
-    return next((f"{lang} Developer" for lang in LANGUAGES if lang.lower() in lowered), "Software Engineer")
+    lowered = {s.lower() for s in skills}
+    langs = [lang for lang in LANGUAGES if lang.lower() in lowered]
+    if not langs:
+        return "Software Engineer"
+    text = str(g(resume or {}, "raw_text", default="") or "")
+
+    def mentions(lang: str) -> int:
+        # "Java" must not count "JavaScript"; "C" must not count "C++" or "C#".
+        pattern = r"(?<![\w+#])" + re.escape(lang) + r"(?![\w+#])"
+        return len(re.findall(pattern, text, re.I))
+
+    order = {lang: i for i, lang in enumerate(langs)}  # ties go to the earlier entry in LANGUAGES
+    return f"{max(langs, key=lambda lang: (mentions(lang), -order[lang]))} Developer"
 
 
 def suggested_location(settings) -> str:
@@ -617,8 +627,9 @@ def _add_job_yourself(settings, keywords: str, location: str) -> None:
     if manual is None:
         return
     with st.expander("Add a job yourself (LinkedIn or any other site)"):
-        st.caption("LinkedIn blocks programs from reading its pages, so the app never visits it. Open the job "
-                   "in your browser, select the whole posting, copy it and paste it here.")
+        st.caption("The app never opens a link you paste here. Open the job in your browser, select the whole "
+                   "posting, copy it and paste it here. LinkedIn forbids programs from reading its pages; "
+                   "it is searched only if you list it in JOBSPY_SITES.")
         st.link_button("Search these keywords on LinkedIn",
                        manual.linkedin_search_url(keywords.strip(), location.strip()),
                        help="Opens LinkedIn in a new browser tab with the keywords and location above.")
@@ -1168,7 +1179,7 @@ def _requirements(m: dict, match_id, have: set, jd: str) -> None:
             st.rerun()
         except Exception as exc:
             if _is_llm_unavailable(exc):
-                st.warning(c.LLM_HELP)
+                st.warning(f"The language model could not run. {exc}")
             else:
                 c.log.exception("LLM requirement analysis failed")
                 st.warning("The language model could not analyse this posting.")
@@ -1340,11 +1351,16 @@ def tab_generate(resume: dict | None, settings=None) -> None:
     if generate:
         job = _job_for(match)
         try:
-            with st.spinner(f"Writing the {DOC_TYPES[doc_type].lower()}... (on a laptop this can take a few minutes)"):
+            st.caption(f"Writing the {DOC_TYPES[doc_type].lower()}. The text appears as the model writes it; "
+                       "on a laptop the first words can take a minute.")
+            with st.container(border=True):
                 if doc_type == "cover_letter":
-                    text = load("generator.cover_letter", "generate_cover_letter")(resume, job, model=_chosen_model())
+                    gen = load("generator.cover_letter")
+                    text = gen.clean_cover_letter(st.write_stream(
+                        gen.stream_cover_letter(resume, job, model=_chosen_model())))
                 else:
-                    text = load("generator.resume_optimizer", "suggest_resume_edits")(resume, job, model=_chosen_model())
+                    stream = load("generator.resume_optimizer", "stream_resume_edits")
+                    text = str(st.write_stream(stream(resume, job, model=_chosen_model())) or "").strip()
             st.session_state[draft_key] = text or ""
             if text:
                 st.toast("Draft ready. Edit it below, then download or save it.")
@@ -1352,7 +1368,7 @@ def tab_generate(resume: dict | None, settings=None) -> None:
                 st.warning("The language model returned an empty draft. Press Generate to try again.")
         except Exception as exc:
             if _is_llm_unavailable(exc):
-                st.warning(c.LLM_HELP)
+                st.warning(f"Could not write the draft. {exc}")
             else:
                 with friendly_errors("generate the document"):
                     raise exc

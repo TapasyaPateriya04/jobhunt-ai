@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Optional
+from typing import Iterator, Optional
 
 import requests
 from loguru import logger
@@ -24,13 +24,16 @@ class LLMUnavailable(RuntimeError):
     """No LLM backend could produce a response; the message says how to fix it."""
 
 
-def _call_ollama(prompt: str, settings, model: Optional[str] = None) -> str:
-    """Stream the answer from Ollama, so a slow model is only cut off if it stops producing text."""
+def _stream_ollama(prompt: str, settings, model: Optional[str] = None) -> Iterator[str]:
+    """Yield the answer from Ollama piece by piece, so a slow model is only cut off if it stops
+    producing text. Thinking is switched off (``think: false``): models such as qwen3.5 otherwise
+    spend minutes writing their reasoning into a separate field and leave ``response`` empty."""
     base = validate_llm_endpoint(settings.ollama_base_url)
     model = model or settings.ollama_model
     resp = requests.post(
         f"{base}/api/generate",
-        json={"model": model, "prompt": prompt, "stream": True, "options": {"temperature": 0.4}},
+        json={"model": model, "prompt": prompt, "stream": True, "think": False,
+              "options": {"temperature": 0.4}},
         timeout=OLLAMA_TIMEOUT,
         stream=True,
     )
@@ -39,24 +42,28 @@ def _call_ollama(prompt: str, settings, model: Optional[str] = None) -> str:
             raise LLMUnavailable(f"Ollama is running but model '{model}' is not available. "
                                  f"Run: ollama pull {model}")
         resp.raise_for_status()
-        parts: list[str] = []
         started = time.monotonic()
         for line in resp.iter_lines():
             if not line:
                 continue
             chunk = json.loads(line)
             if chunk.get("error"):
-                raise LLMUnavailable(f"Ollama reported an error: {str(chunk['error'])[:200]}")
-            parts.append(str(chunk.get("response") or ""))
+                raise LLMUnavailable(f"Ollama ({model}) reported an error: {str(chunk['error'])[:200]}")
+            piece = str(chunk.get("response") or "")
+            if piece:
+                yield piece
             if chunk.get("done"):
                 break
             if time.monotonic() - started > OLLAMA_MAX_SECONDS:
                 raise requests.Timeout(f"no complete answer after {OLLAMA_MAX_SECONDS} s")
     finally:
         resp.close()
-    text = "".join(parts).strip()
+
+
+def _call_ollama(prompt: str, settings, model: Optional[str] = None) -> str:
+    text = "".join(_stream_ollama(prompt, settings, model)).strip()
     if not text:
-        raise LLMUnavailable("Ollama returned an empty response.")
+        raise LLMUnavailable(f"Ollama ({model or settings.ollama_model}) returned an empty response.")
     return text
 
 
@@ -75,41 +82,58 @@ def _call_gemini(prompt: str, settings) -> str:
     return text
 
 
-def call_llm(prompt: str, model: Optional[str] = None) -> str:
-    """Generate text for ``prompt`` with Ollama, falling back to Gemini.
+def _ollama_problem(exc: Exception, settings, model: str) -> str:
+    """A sentence for the user saying what went wrong with Ollama and what to do."""
+    if isinstance(exc, LLMUnavailable):
+        return str(exc)
+    if isinstance(exc, ValueError):  # endpoint rejected by url_guard
+        return (f"Ollama endpoint rejected: {exc}. Keep OLLAMA_BASE_URL on localhost "
+                f"or set ALLOW_REMOTE_LLM=true.")
+    if isinstance(exc, requests.ConnectionError):
+        return (f"Ollama is not reachable at {settings.ollama_base_url}. Install it from "
+                f"ollama.com, then run `ollama serve` and `ollama pull {model}`.")
+    if isinstance(exc, requests.Timeout):
+        return (f"Ollama ({model}) took too long. On a laptop without a GPU use a "
+                "smaller model: `ollama pull llama3.2:3b`, then pick it in the sidebar or set "
+                "OLLAMA_MODEL=llama3.2:3b in .env.")
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        return f"Ollama ({model}) answered with HTTP {exc.response.status_code}."
+    return f"Ollama ({model}) request failed ({type(exc).__name__})."
+
+
+def stream_llm(prompt: str, model: Optional[str] = None) -> Iterator[str]:
+    """Yield the answer to ``prompt`` as it is written: Ollama first, then Gemini.
 
     ``model`` picks an installed Ollama model instead of OLLAMA_MODEL, or ``GEMINI`` to go
-    straight to Gemini. Raises ``LLMUnavailable`` with setup instructions when nothing works.
-    """
+    straight to Gemini. Falls back to Gemini only if Ollama fails before writing anything.
+    Raises ``LLMUnavailable`` with what went wrong and how to fix it."""
     settings = get_settings()
     prompt = (prompt or "")[:MAX_PROMPT_CHARS]
     problems: list[str] = []
     ollama_model = None if model == GEMINI else (model or settings.ollama_model)
 
     if settings.use_ollama and model != GEMINI:
+        wrote = False
         try:
-            return _call_ollama(prompt, settings, ollama_model)
-        except LLMUnavailable as exc:
-            problems.append(str(exc))
-        except ValueError as exc:  # endpoint rejected by url_guard
-            problems.append(f"Ollama endpoint rejected: {exc}. Keep OLLAMA_BASE_URL on localhost "
-                            f"or set ALLOW_REMOTE_LLM=true.")
-        except requests.ConnectionError:
-            problems.append(f"Ollama is not reachable at {settings.ollama_base_url}. Install it from "
-                            f"ollama.com, then run `ollama serve` and `ollama pull {ollama_model}`.")
-        except requests.Timeout:
-            problems.append(f"Ollama ({ollama_model}) took too long. On a laptop without a GPU use a "
-                            "smaller model: `ollama pull llama3.2:3b`, then pick it in the sidebar or set "
-                            "OLLAMA_MODEL=llama3.2:3b in .env.")
-        except (requests.RequestException, KeyError) as exc:
-            problems.append(f"Ollama request failed ({type(exc).__name__}).")
+            for piece in _stream_ollama(prompt, settings, ollama_model):
+                wrote = True
+                yield piece
+            if wrote:
+                return
+            problems.append(f"Ollama ({ollama_model}) returned an empty response.")
+        except (LLMUnavailable, ValueError, requests.RequestException, KeyError, json.JSONDecodeError) as exc:
+            problem = _ollama_problem(exc, settings, ollama_model)
+            if wrote:  # part of the answer is already on screen; do not mix in a second model
+                raise LLMUnavailable(f"The answer stopped part way. {problem}") from exc
+            problems.append(problem)
         logger.warning("Ollama unavailable: {}", problems[-1])
     elif model != GEMINI:
         problems.append("Ollama disabled (USE_OLLAMA=false).")
 
     if settings.gemini_api_key:
         try:
-            return _call_gemini(prompt, settings)
+            yield _call_gemini(prompt, settings)
+            return
         except LLMUnavailable as exc:
             problems.append(str(exc))
         except Exception as exc:  # SDK raises many types; never echo details that may hold the key
@@ -120,4 +144,12 @@ def call_llm(prompt: str, model: Optional[str] = None) -> str:
         problems.append("No Gemini fallback: set GEMINI_API_KEY in .env "
                         "(free key at aistudio.google.com).")
 
-    raise LLMUnavailable("No LLM available. " + " ".join(problems))
+    raise LLMUnavailable(" ".join(problems))
+
+
+def call_llm(prompt: str, model: Optional[str] = None) -> str:
+    """The whole answer from ``stream_llm``; raises ``LLMUnavailable`` when it is empty."""
+    text = "".join(stream_llm(prompt, model)).strip()
+    if not text:
+        raise LLMUnavailable("The language model returned an empty response.")
+    return text

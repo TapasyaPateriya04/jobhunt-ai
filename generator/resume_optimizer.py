@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from generator.cover_letter import _resume_digest
 from generator.fact_check import experience_level
-from generator.llm import call_llm
+from generator.llm import call_llm, stream_llm
 from parser.jd_analyzer import analyze_jd
 from security.prompt_guard import wrap_untrusted
 
@@ -44,3 +44,8 @@ def build_resume_prompt(resume: dict, job: dict) -> str:
 
 def suggest_resume_edits(resume: dict, job: dict, model: str | None = None) -> str:
     return call_llm(build_resume_prompt(resume or {}, job or {}), model=model).strip()
+
+
+def stream_resume_edits(resume: dict, job: dict, model: str | None = None):
+    """The suggestions as they are written (for the UI)."""
+    return stream_llm(build_resume_prompt(resume or {}, job or {}), model=model)

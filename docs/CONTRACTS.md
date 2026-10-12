@@ -63,7 +63,11 @@ code MUST degrade gracefully when they are missing (tests run without them).
   `parse_resume_bytes(filename, data) -> dict` (.tex/.txt/.md; .pdf optional) returning
   `{"raw_text","skills": list[str],"experience": list[dict],"education": str,"summary": str}`.
 - `parser/jd_analyzer.py`: `analyze_jd(text) -> {"skills": list[str], "experience_years": int|None, "keywords": list[str]}`.
-- `generator/llm.py`: `call_llm(prompt) -> str` (Ollama then Gemini fallback; raises `LLMUnavailable` with a helpful message).
+- `generator/llm.py`: `stream_llm(prompt, model=None) -> Iterator[str]` (Ollama streaming with `think: false`, then
+  Gemini if Ollama fails before writing anything) and `call_llm(prompt, model=None) -> str` (the joined stream); both
+  raise `LLMUnavailable` whose message says what failed and how to fix it. The UI shows that message as is.
+- `generator/cover_letter.py`: `stream_cover_letter(...)` + `clean_cover_letter(text)`; `generator/resume_optimizer.py`:
+  `stream_resume_edits(...)` (streamed versions used by the Documents tab).
 - `generator/cover_letter.py`: `generate_cover_letter(resume: dict, job: dict) -> str`.
 - `generator/resume_optimizer.py`: `suggest_resume_edits(resume: dict, job: dict) -> str`.
 - `generator/jd_insights.py`: `split_requirements(jd_text) -> {"must_have", "nice_to_have", "source"}` (rules, instant),
