@@ -79,7 +79,8 @@ code MUST degrade gracefully when they are missing (tests run without them).
 - `matching/semantic_matcher.py`: `semantic_score(resume_text, jd_text) -> float`; lazy-loads `all-MiniLM-L6-v2`;
   falls back to TF-IDF char n-gram / LSA similarity when sentence-transformers unavailable.
 - `matching/confidence_score.py`: `calculate_confidence_score(resume: dict, job: dict) -> dict` with keys
-  `total, ats, experience, semantic, freshness` using weights 0.35/0.30/0.25/0.10 (plus `ats_raw`, `skill_coverage`,
+  `total, ats, experience, semantic, freshness` computed as fit x reach (`combine_parts`; see the module docstring), plus `band`
+  (strong / possible / weak), `missing_title_skills`, `ats_raw`, `skill_coverage`,
   `candidate_years`, `required_years`); `score_jobs(resume, jobs) -> list[dict]`; `required_years_for(job)`,
   `seniority_years(job)`. `ats` = half calibrated TF-IDF, half `ats_scorer.skill_coverage`.
 - `matching/location.py`: `location_fit(job, country, cities=()) -> {"status", "score", "reason"}` with status
@@ -100,11 +101,15 @@ Read and call only: every route calls a function above and adds no source, score
 - `api/core.py`: `load(module, attr=None)` (lazy import, raises `FeatureUnavailable`), `settings()`,
   `repo()`, `jsonable(value)`, `g(dict, *keys)`, `score_of(match)`, `db_location(url)`, `llm_error(exc, action)`.
 - `api/catalog.py`: `SOURCES`, `DEFAULT_SOURCES`, `OPT_IN_SOURCES`, `MATCH_STATUSES`, `TRACKED_STATUSES`,
-  `SCORE_PARTS`, `DOC_TYPES`, `SORTS` and the wording the screens show. Keys must match
-  `ui/components.py` (`tests/test_api.py`), and no string here names the scraping library.
+  `BAND_LABELS`, `SCORE_PARTS`, `SCORE_GUIDE`, `DOC_TYPES`, `SORTS` and the wording the screens show.
+  Keys must match `ui/components.py` (`tests/test_api.py`), no string here names the scraping library,
+  and every score threshold is a placeholder filled at run time from `matching/confidence_score.py`.
 - `api/matching_view.py`: `annotate(matches, resume, country, cities)` (score, band, gap, location fit,
   years, near miss), `detail(match, resume)`, `score_and_save(resume, country, cities)`,
-  `skills_to_learn(rows)`, `home_country(country=None)`, `candidate_years(resume)`.
+  `band_of(total)` and `thresholds()` (both read from `matching.confidence_score`),
+  `rescore_if_formula_changed(resume, country, cities)` (the `SCORING_VERSION` marker `ui/app.py`
+  writes, so whichever front end opens first does the work), `skills_to_learn(rows)`,
+  `home_country(country=None)`, `candidate_years(resume)`.
 - Routes, all under `/api`: `health`, `catalog`, `countries`, `status`, `overview`; `resumes`,
   `resume`, `resume/upload`, `resume/{id}/skills`, `resume/{id}/score`; `jobs`, `jobs/search`,
   `jobs/manual`, `jobs/linkedin-search-url`, `jobs/refresh-state`, `jobs/refresh`,

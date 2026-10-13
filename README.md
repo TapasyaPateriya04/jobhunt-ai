@@ -21,7 +21,7 @@ listed in [AGENTS.md](AGENTS.md).
 Resume (.tex/.txt/.md/.pdf) ─► parser ─► SQLite ◄─ scraper (RemoteOK, HN, The Muse, Arbeitnow, ...)
                                             │
                                             ▼
-                         matching: 0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness
+                         matching: fit (skills, meaning) x reach (experience, freshness)
                                             │
                                             ▼
                      Streamlit dashboard ─► cover letter / resume suggestions (Ollama or Gemini)
@@ -168,7 +168,7 @@ numbers and the next step to take.
   days you choose (30 by default). Jobs you saved, applied to or wrote a document for are kept.
 - **Matches tab**: search by title, company, location or skill; sliders, checkboxes and dropdowns
   narrow the list; **Reset filters** clears them. Each card shows the score with its band
-  (strong 50+, possible 35 to 49, weak), the years asked, whether you can take the job and the
+  (strong 40+, possible 25 to 39, weak), the years asked, whether you can take the job and the
   skills you have (✓) and lack (✕). **Save** and **Hide** work from the card; the expander holds
   the score breakdown, must-have skills and the full posting. **Skills worth adding** lists jobs
   only 1 to 3 skills short. After scraping, adding skills or changing your country, click
@@ -213,7 +213,19 @@ to PostgreSQL later means changing `DATABASE_URL` and running `alembic upgrade h
 
 ## Matching quality
 
-The score is `0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness`:
+The score multiplies how well the job fits by how reachable it is (since 2026-10-12):
+
+```
+fit   = 0.6 ATS + 0.4 semantic
+reach = 0.75 experience + 0.25 freshness
+total = fit x (0.4 + 0.6 x reach / 100)     strong 40+, possible 25-39, weak below 25
+```
+
+Fit is the ceiling, so experience and freshness can no longer lift a job whose skills barely
+match (a job matching only "AI" used to reach 51, "strong"). A job is never strong with a skills
+score under 35, nor possible under 20, and the skills score is capped at 30 when the job title
+names a skill you lack ("Databricks Developer"). The Matches tab explains this under **What the
+scores mean**. When the formula changes (`SCORING_VERSION`), stored jobs are scored again once.
 
 - **ATS**: half TF-IDF keyword overlap, half skill coverage (share of the posting's known skills
   that are on your resume).
@@ -227,7 +239,8 @@ The score is `0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness`:
   or restricted to other countries, time zones or a language you were not asked about. The Matches
   tab can hide those jobs and filter by the years of experience a posting asks for.
 
-These weights differ from the plan's 0.35/0.25/0.20/0.20 because they were measured:
+The earlier weighted sum (0.35/0.30/0.25/0.10) was tuned on labelled jobs; re-check the new
+formula the same way:
 
 ```bash
 python scripts/evaluate_matching.py --snapshot   # once: copy the labeled jobs from your database

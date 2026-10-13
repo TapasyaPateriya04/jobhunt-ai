@@ -71,7 +71,8 @@ instead by a per-site wait of `JOBSPY_REFRESH_MINUTES` stored in
    page is open, a Streamlit fragment (`st.fragment(run_every=...)`) searches the JobSpy
    sites again when their wait is over.
 3. **Scoring** (`ui/app._score_and_save`, `matching.confidence_score.score_jobs`):
-   `total = 0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness`, multiplied by a
+   `fit = 0.6 ATS + 0.4 semantic`, `reach = 0.75 experience + 0.25 freshness`,
+   `total = fit x (0.4 + 0.6 reach/100)` with caps when skills are low, multiplied by a
    location factor (1.0 to 0.4) when `CANDIDATE_COUNTRY` is set. Saved as `matches` rows.
 4. **React**: the browser loads `web/dist` (or Vite's dev server, which proxies `/api`), reads
    `/api/catalog` and `/api/status` once, then calls the same functions as above through

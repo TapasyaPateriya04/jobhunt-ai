@@ -6,7 +6,8 @@ from pydantic import BaseModel
 
 from api import catalog
 from api.core import clamp, jsonable, llm_error, load, log, repo
-from api.matching_view import annotate, candidate_years, detail, home_cities, home_country, skills_to_learn
+from api.matching_view import (annotate, candidate_years, detail, home_cities, home_country,
+                               rescore_if_formula_changed, skills_to_learn)
 
 router = APIRouter()
 
@@ -21,15 +22,18 @@ def list_matches(resume_id: int, country: str | None = None, limit: int = 500) -
     resume = repo().get_resume(resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="That resume is not stored any more.")
+    place = home_country(country)
+    # Scores saved by an older formula are redone once, by whichever front end opens first.
+    rescored = rescore_if_formula_changed(resume, place, home_cities())
     try:
         rows = repo().list_matches(resume_id, limit=clamp(limit, 1, 1000, 500))
     except Exception:
         log.exception("list_matches failed")
         raise HTTPException(status_code=500, detail="The matches could not be read.") from None
-    place = home_country(country)
     annotated = [jsonable(r) for r in annotate(rows, resume, place, home_cities())]
     return {
         "matches": annotated,
+        "rescored": rescored,
         "country": place,
         "cities": list(home_cities()),
         "candidate_years": round(candidate_years(resume), 1),

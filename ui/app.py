@@ -235,7 +235,7 @@ def render_overview(resume: dict | None) -> None:
     matches = _matches(resume)
     jobs = int(db_counts().get("Jobs", 0) or 0)
     if resume and (jobs or matches):
-        strong = sum(1 for m in matches if _score_of(m) >= 50 and g(m, "status", default="new") != "hidden")
+        strong = sum(1 for m in matches if _score_of(m) >= c.STRONG_AT and g(m, "status", default="new") != "hidden")
         cells = [(jobs, "jobs collected"), (len(matches), "scored for this resume"), (strong, "strong matches"),
                  (_count(matches, "saved"), "saved"), (_count(matches, "applied"), "applied")]
         st.markdown('<div class="jh-stat">' + "".join(f"<div><b>{n}</b><span>{label}</span></div>"
@@ -331,10 +331,23 @@ LANGUAGES = ("Java", "Python", "JavaScript", "TypeScript", "Go", "Kotlin", "C#",
              "Rust", "Scala", "Swift", "Dart")
 
 
+# Frameworks and tools that count as using a language, so "Spring Boot" and "JUnit" add to Java.
+ECOSYSTEMS = {
+    "Java": ("Spring", "Hibernate", "JUnit", "Maven", "Gradle"),
+    "Python": ("Django", "FastAPI", "Flask", "pandas", "PyTorch"),
+    "JavaScript": ("React", "Node.js", "Node", "Express", "Next.js", "Angular", "Vue"),
+    "TypeScript": ("Angular", "NestJS"),
+    "Go": ("Gin", "Goroutines"),
+    "Kotlin": ("Android", "Ktor"),
+    "C#": (".NET", "ASP.NET"),
+}
+
+
 def suggested_keywords(resume: dict | None) -> str:
-    """A first search from the resume: the programming language it mentions most, plus "Developer".
-    Counting mentions (not taking the first skill listed) keeps a language named once in a skills
-    list, e.g. C++, from beating the one used in every job on the resume."""
+    """A first search from the resume: the programming language it uses most, plus "Developer".
+    A language counts its own mentions and those of its frameworks (Spring Boot and JUnit for
+    Java), so a language named once in a skills list, e.g. C++, does not beat the one the
+    candidate's jobs were written in."""
     skills = [str(s) for s in c.as_list(g(resume or {}, "skills", default=[]))]
     lowered = {s.lower() for s in skills}
     langs = [lang for lang in LANGUAGES if lang.lower() in lowered]
@@ -342,13 +355,16 @@ def suggested_keywords(resume: dict | None) -> str:
         return "Software Engineer"
     text = str(g(resume or {}, "raw_text", default="") or "")
 
-    def mentions(lang: str) -> int:
-        # "Java" must not count "JavaScript"; "C" must not count "C++" or "C#".
-        pattern = r"(?<![\w+#])" + re.escape(lang) + r"(?![\w+#])"
-        return len(re.findall(pattern, text, re.I))
+    def count(word: str) -> int:
+        # "Java" must not count "JavaScript"; "C" must not count "C++"; "Go" only as a name.
+        flags = 0 if word == "Go" else re.I
+        return len(re.findall(r"(?<![\w+#.])" + re.escape(word) + r"(?![\w+#])", text, flags))
+
+    def uses(lang: str) -> int:
+        return count(lang) + sum(count(tool) for tool in ECOSYSTEMS.get(lang, ()))
 
     order = {lang: i for i, lang in enumerate(langs)}  # ties go to the earlier entry in LANGUAGES
-    return f"{max(langs, key=lambda lang: (mentions(lang), -order[lang]))} Developer"
+    return f"{max(langs, key=lambda lang: (uses(lang), -order[lang]))} Developer"
 
 
 def suggested_location(settings) -> str:
@@ -503,8 +519,8 @@ def tab_scrape(settings) -> None:
             key="scrape_sources",
             help="The free public APIs allow programs. Himalayas lists remote jobs open to your country. "
                  "Greenhouse and Lever read the company career boards named in .env. LinkedIn and Naukri "
-                 "appear only when listed in JOBSPY_SITES, and are searched at most once per "
-                 "JOBSPY_REFRESH_MINUTES.")
+                 "appear only when you turn them on in .env, and are searched at most once per "
+                 "refresh interval (an hour by default).")
         submitted = st.form_submit_button("Find jobs", type="primary")
 
     if submitted:
@@ -599,8 +615,8 @@ def _jobspy_auto_refresh(settings) -> None:
     minutes = int(getattr(settings, "jobspy_refresh_minutes", 60) or 60)
     on = st.toggle(f"Refresh LinkedIn and Naukri every {minutes} min while this page is open",
                    value=True, key="jobspy_auto",
-                   help="Uses the keywords and location above. Each site is searched at most once per "
-                        "JOBSPY_REFRESH_MINUTES, also counting searches you start yourself.")
+                   help=f"Uses the keywords and location above. Each site is searched at most once every "
+                        f"{minutes} min, also counting searches you start yourself.")
     if not on:
         return
 
@@ -629,7 +645,7 @@ def _add_job_yourself(settings, keywords: str, location: str) -> None:
     with st.expander("Add a job yourself (LinkedIn or any other site)"):
         st.caption("The app never opens a link you paste here. Open the job in your browser, select the whole "
                    "posting, copy it and paste it here. LinkedIn forbids programs from reading its pages; "
-                   "it is searched only if you list it in JOBSPY_SITES.")
+                   "it is searched only if you turn it on in .env.")
         st.link_button("Search these keywords on LinkedIn",
                        manual.linkedin_search_url(keywords.strip(), location.strip()),
                        help="Opens LinkedIn in a new browser tab with the keywords and location above.")
@@ -854,14 +870,39 @@ def _sorted(matches: list[dict], how: str) -> list[dict]:
     return sorted(matches, key=score)
 
 
+def _rescore_if_formula_changed(resume: dict, settings) -> None:
+    """Stored scores were saved by an older scoring formula: score them again, once."""
+    try:
+        version = int(load("matching.confidence_score", "SCORING_VERSION"))
+    except Exception:
+        return
+    marker = Path(os.path.expanduser(str(getattr(settings, "docs_dir", "~/jobhunt_docs")))) / ".scoring_version"
+    try:
+        if marker.read_text(encoding="utf-8").strip() == str(version):
+            return
+    except OSError:
+        pass
+    if _score_stored(resume, settings, "The scoring was improved. Scoring your stored jobs again...") is None:
+        return  # failed: try again on the next visit
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(version), encoding="utf-8")
+    except OSError:
+        c.log.warning("Could not save the scoring version", exc_info=True)
+
+
 def tab_matches(resume: dict | None, settings=None) -> None:
-    st.subheader("Job matches")
+    head, info = st.columns([3, 2], vertical_alignment="bottom")
+    head.subheader("Job matches")
+    with info:
+        c.score_help(key="score_help_matches")
     if not resume or g(resume, "id") is None:
         c.empty_state("file", "Add your resume first",
                       "Matches are scored against your resume. Upload it on the Resume tab.")
         return
 
     cities = tuple(getattr(settings, "candidate_cities", ()) or ())
+    _rescore_if_formula_changed(resume, settings)
     panel = st.container(border=True)
     with panel:
         c.panel_title("Where you can work")
@@ -910,8 +951,9 @@ def tab_matches(resume: dict | None, settings=None) -> None:
                                        "location or required skills.")
             s2.button("Reset filters", key="filter_reset_btn", use_container_width=True, on_click=_reset_filters)
             f = st.columns(2)
-            min_score = f[0].slider("Minimum confidence", 0, 100, 0, step=5, key=f"f_min{k}",
-                                    help="50 and above is a strong match, 35 to 49 a possible one.")
+            min_score = f[0].slider("Minimum match score", 0, 100, 0, step=5, key=f"f_min{k}",
+                                    help=f"{c.STRONG_AT:.0f} and above is a strong match, {c.POSSIBLE_AT:.0f} to "
+                                         f"{c.STRONG_AT - 1:.0f} a possible one. See \"What do the scores mean?\".")
             default_years = min(ANY_YEARS, int(my_years + 0.999) + 2)
             max_years = f[1].slider("Asks for at most (years)", 0, ANY_YEARS, default_years,
                                     key=f"f_years{k}_{default_years}",
@@ -970,7 +1012,7 @@ def tab_matches(resume: dict | None, settings=None) -> None:
         c.strip(parts)
         if not shown:
             c.empty_state("filter", "No jobs pass these filters",
-                          "Clear the search, raise the years limit or lower the minimum confidence. "
+                          "Clear the search, raise the years limit or lower the minimum match score. "
                           "Reset filters puts everything back.")
             return
         _charts(shown)
@@ -1111,9 +1153,10 @@ def _match_detail(m: dict, resume_text: str, have: set) -> None:
     st.markdown(c.score_bars_html(
         [("Skills and keywords", g(m, "ats_score", "ats")), ("Experience fit", g(m, "experience_score", "experience")),
          ("Meaning match", g(m, "semantic_score", "semantic")), ("Freshness", g(m, "freshness_score", "freshness"))],
-        note="The match score is 35% skills and keywords, 30% experience fit, 25% meaning match and "
-             "10% freshness, then lowered if the job is not open to your location."),
+        note="Fit (60% skills, 40% meaning) is the ceiling; experience and freshness decide how much of it "
+             "the job keeps, then it is lowered if the job is not open to your location."),
         unsafe_allow_html=True)
+    c.score_help(key=f"score_help_{match_id}")
     jd = g(m, "description", default="") or ""
     if jd and resume_text:
         _requirements(m, match_id, have, jd)

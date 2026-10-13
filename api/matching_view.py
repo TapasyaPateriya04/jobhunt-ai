@@ -7,9 +7,10 @@ change a single score.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from api.core import as_list, g, load, log, score_of, setting
-from api.catalog import BLOCKED_LOCATIONS, score_band, source_name
+from api.catalog import BLOCKED_LOCATIONS, band_label, source_name
 
 
 @lru_cache(maxsize=4096)
@@ -51,6 +52,53 @@ def home_country(country=None) -> str:
 
 def home_cities() -> tuple:
     return tuple(setting("candidate_cities", ()) or ())
+
+
+def band_of(total) -> str:
+    """"strong", "possible" or "weak", from the one function both front ends use."""
+    try:
+        return str(load("matching.confidence_score", "band")(total))
+    except Exception:
+        return "none"
+
+
+def thresholds() -> dict:
+    """The numbers the score guide quotes, read from matching/confidence_score.py."""
+    cs = load("matching.confidence_score")
+    return {
+        "strong": float(cs.STRONG_AT),
+        "possible": float(cs.POSSIBLE_AT),
+        "strong_skills": float(cs.STRONG_MIN_SKILLS),
+        "possible_skills": float(cs.POSSIBLE_MIN_SKILLS),
+        "title_cap": float(cs.TITLE_SKILL_CAP),
+    }
+
+
+def rescore_if_formula_changed(resume: dict, country: str, cities: tuple) -> int:
+    """Stored scores were saved by an older formula: score them again, once.
+
+    The marker file is the one ``ui/app.py`` writes, so whichever front end opens first
+    does the work and the other finds it done.
+    """
+    import os
+
+    try:
+        version = int(load("matching.confidence_score", "SCORING_VERSION"))
+    except Exception:
+        return 0
+    marker = Path(os.path.expanduser(str(setting("docs_dir", "~/jobhunt_docs")))) / ".scoring_version"
+    try:
+        if marker.read_text(encoding="utf-8").strip() == str(version):
+            return 0
+    except OSError:
+        pass
+    scored = score_and_save(resume, country, cities)
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(version), encoding="utf-8")
+    except OSError:
+        log.warning("Could not save the scoring version")
+    return scored
 
 
 def candidate_years(resume: dict) -> float:
@@ -103,7 +151,7 @@ def annotate(matches: list, resume: dict, country: str, cities: tuple) -> list:
     out = []
     for m in matches:
         total = score_of(m)
-        band = score_band(total)
+        band = band_of(total)
         row = {
             "id": g(m, "id", "match_id"),
             "job_id": g(m, "job_id"),
@@ -116,8 +164,8 @@ def annotate(matches: list, resume: dict, country: str, cities: tuple) -> list:
             "posted_date": g(m, "posted_date"),
             "status": g(m, "status", default="new"),
             "score": round(total, 1),
-            "band": band["key"],
-            "band_label": band["label"],
+            "band": band,
+            "band_label": band_label(band),
             "parts": {
                 "ats": _num(g(m, "ats_score", "ats")),
                 "experience": _num(g(m, "experience_score", "experience")),

@@ -43,9 +43,8 @@ from log lines.
 - **Job searches.** When you press **Find jobs**, your search keywords (and your location,
   where the source supports it) are sent to the job sources you ticked (RemoteOK, Hacker News, The Muse, Arbeitnow, Himalayas, and
   any Greenhouse or Lever company boards set in `.env`). Your resume is not sent.
-- **LinkedIn and Naukri, only if you turn them on.** If `JOBSPY_SITES` in `.env` lists them,
-  the same search is sent to those sites through the JobSpy library. This is
-  off by default.
+- **LinkedIn and Naukri, only if you turn them on.** If you turn them on in `.env`, the same
+  search is sent to those sites. This is off by default.
 - **Writing with a language model.** By default cover letters and resume suggestions are
   written by Ollama on your own computer, so your resume and the job description stay here.
   If you set `GEMINI_API_KEY` and Ollama is not available, the app sends your resume text and

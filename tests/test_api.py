@@ -56,8 +56,24 @@ def test_health_and_catalog(client):
     catalog = client.get("/api/catalog").json()
     keys = {source["key"] for source in catalog["sources"]}
     assert {"remoteok", "hn", "themuse", "arbeitnow", "himalayas"} <= keys
-    assert [part["key"] for part in catalog["score_parts"]] == ["ats", "experience", "semantic", "freshness"]
-    assert sum(part["weight"] for part in catalog["score_parts"]) == pytest.approx(1.0)
+    assert [part["key"] for part in catalog["score_parts"]] == ["ats", "semantic", "experience", "freshness"]
+    for group in ("fit", "reach"):
+        shares = [p["share"] for p in catalog["score_parts"] if p["group"] == group]
+        assert sum(shares) == pytest.approx(1.0), group
+
+
+def test_the_bands_and_the_guide_come_from_the_scoring_module(client):
+    """The numbers the screens quote are read from matching/confidence_score.py, never typed twice."""
+    from matching import confidence_score as cs
+
+    catalog = client.get("/api/catalog").json()
+    assert [band["key"] for band in catalog["bands"]] == ["strong", "possible", "weak"]
+    assert catalog["bands"][0]["min"] == cs.STRONG_AT
+    assert catalog["bands"][1]["min"] == cs.POSSIBLE_AT
+    guide = " ".join(line for section in catalog["score_guide"] for line in section["lines"])
+    assert f"{cs.STRONG_AT:.0f} and above" in guide
+    assert f"{cs.TITLE_SKILL_CAP:.0f}" in guide
+    assert "{" not in guide  # every placeholder was filled in
 
 
 def test_catalog_names_match_the_streamlit_app():
@@ -71,6 +87,7 @@ def test_catalog_names_match_the_streamlit_app():
     assert catalog.TRACKED_STATUSES == c.TRACKED_STATUSES
     assert catalog.DEFAULT_SOURCES == c.DEFAULT_SOURCES
     assert catalog.OPT_IN_SOURCES == c.JOBSPY_SOURCES
+    assert set(catalog.BAND_LABELS.values()) >= set(c.SCORE_LABELS.values())
 
 
 def test_overview_names_the_next_step(client):
@@ -96,7 +113,8 @@ def test_the_whole_flow(client):
     match = listed["matches"][0]
     assert match["title"] == "Java Backend Developer"
     assert match["score"] > 0
-    assert match["band"] in {"hi", "mid", "low"}
+    assert match["band"] in {"strong", "possible", "weak"}
+    assert match["band_label"].endswith("match")
     assert set(match["parts"]) == {"ats", "experience", "semantic", "freshness"}
     assert match["location_status"] == "local"
     assert "Java" in match["gap"]["required"]

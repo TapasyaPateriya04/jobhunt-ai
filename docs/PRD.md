@@ -50,6 +50,7 @@ One person, on their own machine. No accounts, no server, no sharing.
 | Paste a job yourself, open the search on LinkedIn | Find jobs | Done 2026-10-12 |
 | Back up (CSV) and clean up old jobs | Find jobs | Done |
 | Ranked matches with filters, score breakdown, skill gaps | Matches | Done |
+| Honest scores: fit x reach, label caps when skills are low, "What the scores mean" guide | Matches | Done 2026-10-12 |
 | Skills to learn that would close near-miss jobs | Matches | Done |
 | Saved / applied / rejected tracking | Applications | Done |
 | Cover letter and resume suggestions, fact check, Word/PDF export | Documents | Done |

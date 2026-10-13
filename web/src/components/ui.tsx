@@ -175,13 +175,16 @@ export function Bars({
   parts,
   note,
 }: {
-  parts: { label: string; value: number | null; about?: string }[];
+  parts: { label: string; value: number | null; about?: string; group?: string }[];
   note?: string;
 }) {
   return (
     <div className="bars">
-      {parts.map((part) => (
+      {parts.map((part, i) => (
         <div className="bar" key={part.label}>
+          {part.group && part.group !== parts[i - 1]?.group && (
+            <h4 style={{ gridColumn: "1 / -1", marginTop: i ? 6 : 0 }}>{part.group}</h4>
+          )}
           <span className="label">{part.label}</span>
           <span className="value">{part.value === null ? "not scored" : `${Math.round(part.value)} / 100`}</span>
           <span className="track">
@@ -327,6 +330,24 @@ export function Posting({ text }: { text: string }) {
         if (block.kind === "h") return <h5 key={i}>{block.lines[0]}</h5>;
         return <p key={i}>{block.lines[0]}</p>;
       })}
+    </div>
+  );
+}
+
+/** The "What the scores mean" sections, as the API fills them in. */
+export function Guide({ sections }: { sections: { title: string; lines: string[] }[] }) {
+  return (
+    <div className="guide">
+      {sections.map((section) => (
+        <div key={section.title}>
+          <h4>{section.title}</h4>
+          <ul>
+            {section.lines.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

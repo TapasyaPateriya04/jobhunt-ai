@@ -6,6 +6,7 @@ import type { Catalog, LearnList, Match, MatchDetail, MatchList } from "../api";
 import {
   Bars,
   Chips,
+  Guide,
   CountBars,
   Empty,
   Field,
@@ -140,6 +141,14 @@ export function MatchesTab() {
         )}
       </Panel>
 
+      <ScoreGuide />
+
+      {matches.data && matches.data.rescored > 0 && (
+        <Notice tone="info">
+          The scoring was improved, so your {matches.data.rescored} stored jobs were scored again.
+        </Notice>
+      )}
+
       {matches.loading && !matches.data ? (
         <Skeleton rows={4} />
       ) : matches.error ? (
@@ -169,7 +178,7 @@ export function MatchesTab() {
             <Empty
               icon="filter"
               title="No jobs pass these filters"
-              hint="Clear the search, raise the years limit or lower the minimum confidence. Reset filters puts everything back."
+              hint="Clear the search, raise the years limit or lower the minimum match score. Reset filters puts everything back."
             />
           ) : (
             <>
@@ -284,8 +293,8 @@ function FilterPanel({
         </Field>
         <div className="grid2">
           <Field
-            label={`Minimum confidence: ${filters.minScore}`}
-            help="50 and above is a strong match, 35 to 49 a possible one."
+            label={`Minimum match score: ${filters.minScore}`}
+            help={bandHelp(catalog)}
           >
             <input
               type="range"
@@ -525,6 +534,7 @@ function Detail({ match, onChanged }: { match: Match; onChanged: () => void }) {
         label: part.label,
         value: match.parts[part.key] ?? null,
         about: part.about,
+        group: part.group === "fit" ? "Fit: how well you match the work" : "Reach: how far it is from you now",
       })),
     [catalog, match],
   );
@@ -636,6 +646,14 @@ function Detail({ match, onChanged }: { match: Match; onChanged: () => void }) {
 
       <Panel title="How this score was worked out">
         <Bars parts={parts} note={catalog?.score_note} />
+        <details style={{ marginTop: 10 }}>
+          <summary className="hint" style={{ cursor: "pointer" }}>
+            What the scores mean
+          </summary>
+          <div style={{ marginTop: 10 }}>
+            <Guide sections={catalog?.score_guide ?? []} />
+          </div>
+        </details>
       </Panel>
 
       {requirements && (requirements.must_have.length > 0 || requirements.nice_to_have.length > 0) && (
@@ -748,6 +766,31 @@ function SkillsToLearn() {
           </ul>
         </div>
       )}
+    </Panel>
+  );
+}
+
+function bandHelp(catalog: Catalog | null): string {
+  const bands = catalog?.bands ?? [];
+  if (bands.length < 2) return "Higher is a better match.";
+  const [strong, possible] = bands;
+  return `${strong.min} and above is a ${strong.label.toLowerCase()}, ${possible.min} to ${strong.min - 1} a ${possible.label.toLowerCase()}.`;
+}
+
+function ScoreGuide() {
+  const { catalog } = useApp();
+  const [open, setOpen] = useState(false);
+  if (!catalog?.score_guide?.length) return null;
+  return (
+    <Panel
+      title="What the scores mean"
+      action={
+        <button type="button" className="quiet small" onClick={() => setOpen(!open)} aria-expanded={open}>
+          {open ? "Hide" : "Show"}
+        </button>
+      }
+    >
+      {open ? <Guide sections={catalog.score_guide} /> : <p className="hint">{catalog.score_note}</p>}
     </Panel>
   );
 }

@@ -360,9 +360,9 @@ label.check { display: flex; align-items: center; gap: 9px; font-size: 0.88rem; 
 }
 .score .num { font-family: var(--mono); font-size: 1.15rem; font-weight: 500; letter-spacing: -0.03em; line-height: 1; }
 .score .band { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
-.score.hi .num { color: var(--ok); }
-.score.mid .num { color: var(--warn); }
-.score.low .num { color: var(--muted); }
+.score.strong .num { color: var(--ok); }
+.score.possible .num { color: var(--warn); }
+.score.weak .num { color: var(--muted); }
 
 .bars { display: grid; gap: 9px; }
 .bar { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; align-items: baseline; }
@@ -398,6 +398,11 @@ label.check { display: flex; align-items: center; gap: 9px; font-size: 0.88rem; 
 .badge.ok { background: var(--ok-wash); border-color: var(--ok-line); color: var(--ok); }
 .badge.bad { background: var(--bad-wash); border-color: var(--bad-line); color: var(--bad); }
 .badge.accent { background: var(--accent-wash); border-color: var(--accent-line); color: var(--accent-ink); }
+
+.guide { display: grid; gap: 12px; }
+.guide h4 { margin-bottom: 4px; }
+.guide ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 0.88rem; }
+.guide li { margin: 3px 0; }
 
 .posting {
   font-size: 0.9rem;

@@ -32,6 +32,11 @@ def ui_env(tmp_path, monkeypatch):
     url = f"sqlite:///{(tmp_path / 'ui_test.db').as_posix()}"
     monkeypatch.setenv("DATABASE_URL", url)
     monkeypatch.setenv("DOCS_DIR", str(tmp_path / "docs"))
+    # Scores seeded by tests are current; the app must not re-score them on its own.
+    from matching.confidence_score import SCORING_VERSION
+
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / ".scoring_version").write_text(str(SCORING_VERSION))
     monkeypatch.setenv("USE_OLLAMA", "false")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     try:
@@ -112,7 +117,7 @@ def test_renders_with_resume_jobs_and_matches(ui_env):
     assert "jh-score" in cards[1] and ">72<" in cards[1]
     assert any(e.label == "Score breakdown, skills and full posting" for e in at.expander)
     assert {"Save", "Hide"} <= {b.label for b in at.button}
-    assert {"Minimum confidence", "Asks for at most (years)"} <= {s.label for s in at.slider}
+    assert {"Minimum match score", "Asks for at most (years)"} <= {s.label for s in at.slider}
     assert {"Your country", "Source", "Status", "Sort by"} <= {s.label for s in at.selectbox}
     assert {"Only jobs I can take", "Include jobs that state no years",
             "Show the full job description"} <= {c.label for c in at.checkbox}
@@ -330,10 +335,10 @@ def test_overview_names_the_next_step(ui_env):
 def test_score_is_labelled_in_words(ui_env):
     from ui import components as c
 
-    assert [c.score_label(v) for v in (72, 40, 10, None)] == [
+    assert [c.score_label(v) for v in (72, 30, 10, None)] == [
         "Strong match", "Possible match", "Weak match", "Not scored"]
-    card = c.job_card_html({"title": "T", "company": "C"}, score=40)
-    assert "jh-score mid" in card and "Possible match" in card and 'aria-label="Match score 40 out of 100' in card
+    card = c.job_card_html({"title": "T", "company": "C"}, score=30)
+    assert "jh-score mid" in card and "Possible match" in card and 'aria-label="Match score 30 out of 100' in card
 
 
 def test_applications_tab_tracks_saved_jobs(ui_env):
@@ -641,13 +646,44 @@ def test_jobspy_auto_refresh_adds_jobs_once(ui_env, monkeypatch, tmp_path):
     assert len(calls) == 1
 
 
-def test_default_keyword_is_the_language_the_resume_uses_most():
-    import importlib
+def test_default_keyword_is_the_language_the_resume_uses_most(ui_env):
+    from db import repository as repo
 
-    app = importlib.import_module("ui.app")
-    resume = {"skills": ["C++", "Java", "JavaScript", "Go"],
-              "raw_text": "Skills: C++, Java, JavaScript, Go\nCars24: built Java services with Spring Boot and Go "
-                          "workers. Java 17, JavaScript UI."}
-    assert app.suggested_keywords(resume) == "Java Developer"
-    assert app.suggested_keywords({"skills": ["Figma"]}) == "Software Engineer"
-    assert app.suggested_keywords({"skills": ["C++"], "raw_text": ""}) == "C++ Developer"
+    repo.save_resume({**RESUME, "skills": ["C++", "Java", "JavaScript", "Go"],
+                      "raw_text": "Skills: C++, Java, JavaScript, Go\nCars24: built Java services with "
+                                  "Spring Boot and Go workers. Java 17, JavaScript UI."}, "resume.txt")
+    at = _run()
+    _assert_clean(at)
+    assert at.text_input(key="scrape_keywords").value == "Java Developer"
+
+
+def test_frameworks_count_toward_their_language(ui_env):
+    from db import repository as repo
+
+    # Python is named more often, but Spring Boot and JUnit make Java the main language.
+    repo.save_resume({**RESUME, "skills": ["Python", "Java", "Go"],
+                      "raw_text": "Python, Python scripts, Python tooling. Java. Spring Boot services, "
+                                  "Spring Security, JUnit tests, JUnit 5. Let's go."}, "resume.txt")
+    at = _run()
+    _assert_clean(at)
+    assert at.text_input(key="scrape_keywords").value == "Java Developer"
+
+def test_score_glossary_is_one_click_away(ui_env):
+    _seed()
+    at = _run()
+    _assert_clean(at)
+    pops = [p for p in at.get("popover") if "score_help_matches" in p.proto.id]
+    assert pops and "Match score (0 to 100)" in pops[0].children[0].value
+
+
+def test_stored_scores_are_redone_once_after_the_formula_changes(ui_env, tmp_path):
+    from db import repository as repo
+    from matching.confidence_score import SCORING_VERSION
+
+    marker = tmp_path / "docs" / ".scoring_version"
+    marker.write_text("1")
+    rid = _seed(total=72.0)  # saved by the old formula
+    at = _run()
+    _assert_clean(at)
+    assert repo.list_matches(rid)[0]["confidence_score"] != 72.0
+    assert marker.read_text() == str(SCORING_VERSION)

@@ -78,7 +78,7 @@ values into new code):
   turns white with a soft shadow; job cards lift on hover.
 - **Job card** (`c.job_card_html`): title, company, location, skill chips, age and source,
   "Open posting" link. Each card sits in `st.container(border=True)`.
-- **Score**: a number plus a band word (strong 50+, possible 35 to 49, weak), never color
+- **Score**: a number plus a band word (strong 40+, possible 25 to 39, weak), never color
   alone. Breakdown (ATS, experience, semantic, freshness, location) in an expander.
 - **Chips and badges**: small square-ish corners (`--jh-r-sm`, 5 px), never pill-shaped; a tick (✓) or cross (✕) carries the meaning, color
   only reinforces it.
@@ -146,8 +146,11 @@ Patterns, beyond the ones above:
   is scrolled into view.
 - **Matches**: a list on the left and the job you picked on the right (`.split`), the detail
   pane sticky on a wide screen. The selected row carries an indigo border, never colour alone.
-- **Score breakdown**: one bar per part with its value out of 100 and a line saying what the
-  part measures, under the weights sentence from `api/catalog.py`.
+- **Score breakdown**: the four parts in two groups, fit then reach, one bar each with its value
+  out of 100 and a line saying what the part measures, under the sentence from `api/catalog.py`.
+  A "What the scores mean" panel on the Matches tab, and the same guide behind a summary in each
+  breakdown, explain the formula, the bands and the caps. Its numbers come from
+  `matching/confidence_score.py` through `/api/catalog`, so they cannot drift from Streamlit's.
 - **Loading**: skeleton cards shaped like the content, and a thin indeterminate bar for work
   that takes a while (searching, scoring, writing). No spinners.
 - **Feedback**: a `.notice` under the control that caused it, in one of four tones, which clears

@@ -29,25 +29,53 @@ OPT_IN_SOURCES = ["linkedin", "naukri"]
 DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow", "himalayas"]
 BOARD_SOURCES = ["greenhouse", "lever"]
 
-SCORE_BANDS = [
-    {"key": "hi", "label": "Strong match", "min": 50},
-    {"key": "mid", "label": "Possible match", "min": 35},
-    {"key": "low", "label": "Weak match", "min": 0},
-]
+# Band keys come from matching.confidence_score.band(); the thresholds are read from there
+# at run time (api/routes_meta.py) so the two front ends can never show different numbers.
+BAND_LABELS = {"strong": "Strong match", "possible": "Possible match", "weak": "Weak match",
+               "none": "Not scored"}
 
-# What each part of the score measures, shown next to the breakdown bars.
+# What each part of the score measures, shown next to the breakdown bars. "group" is the half
+# of the formula the part belongs to, "share" its weight inside that half.
 SCORE_PARTS = [
-    {"key": "ats", "label": "Skills and keywords", "weight": 0.35,
-     "about": "How many of the skills and words the posting asks for appear in your resume."},
-    {"key": "experience", "label": "Experience fit", "weight": 0.30,
-     "about": "Your years against the years the posting asks for. Full marks when you meet or pass them."},
-    {"key": "semantic", "label": "Meaning match", "weight": 0.25,
-     "about": "How close the posting reads to your resume overall, not word by word."},
-    {"key": "freshness", "label": "Freshness", "weight": 0.10,
-     "about": "How recently the job was posted. Older postings are often already filled."},
+    {"key": "ats", "label": "Skills and keywords", "group": "fit", "share": 0.6,
+     "about": "Half the share of the posting's skills that are on your resume, half how many of "
+              "its important words your resume uses."},
+    {"key": "semantic", "label": "Meaning match", "group": "fit", "share": 0.4,
+     "about": "How close the posting and your resume are in meaning, not just in words."},
+    {"key": "experience", "label": "Experience fit", "group": "reach", "share": 0.75,
+     "about": "100 when you have the years the job asks for, 20 points less for each year short. "
+              "70 when the posting does not say."},
+    {"key": "freshness", "label": "Freshness", "group": "reach", "share": 0.25,
+     "about": "100 for jobs posted in the last day, down to 30 after two weeks."},
 ]
-SCORE_NOTE = ("The match score is 35% skills and keywords, 30% experience fit, 25% meaning match and "
-              "10% freshness. It is then lowered when the job is not open to your location.")
+SCORE_NOTE = ("Fit is 60% skills and 40% meaning, and is the ceiling. Reach, 75% experience and "
+              "25% freshness, decides how much of that fit the job keeps. The total is then "
+              "lowered when the job is not open to your location.")
+
+# The "What the scores mean" guide. {strong}, {possible}, {title_cap}, {strong_skills} and
+# {possible_skills} are filled from matching/confidence_score.py.
+SCORE_GUIDE = [
+    ("How the score is worked out",
+     ["The match score, 0 to 100, says how well your resume fits the job, lowered when the job is "
+      "hard to reach for you right now.",
+      "Fit is 60% skills and keywords plus 40% meaning match. It is the ceiling: a job can never "
+      "score higher than its fit.",
+      "Reach is 75% experience fit plus 25% freshness. A job you can fully reach keeps all of its "
+      "fit; one you cannot reach yet keeps 40% of it.",
+      "The total is then lowered if the job is not open to your country."]),
+    ("What the bands mean",
+     ["Strong match is {strong} and above, possible {possible} to {strong_minus}, weak below "
+      "{possible}.",
+      "A job can only be strong when its skills score is {strong_skills} or more, and only "
+      "possible when it is {possible_skills} or more, so experience and freshness alone never "
+      "make a job look good.",
+      "The skills score is capped at {title_cap} when the job title names a skill you do not have, "
+      "for example a Databricks Developer role without Databricks."]),
+    ("Reading a job's skills",
+     ["A tick means the skill is on your resume, a cross means it is not.",
+      "Skills come from a fixed list, so very short names (C, Go, R) can sometimes be picked up by "
+      "mistake. Read the posting before you apply."]),
+]
 
 DOC_TYPES = {"cover_letter": "Cover letter", "resume_suggestions": "Resume suggestions"}
 
@@ -80,9 +108,5 @@ def status_name(status) -> str:
     return STATUS_LABELS.get(str(status), str(status).capitalize())
 
 
-def score_band(value) -> dict:
-    try:
-        v = float(value)
-    except (TypeError, ValueError):
-        return {"key": "none", "label": "Not scored", "min": 0}
-    return next(b for b in SCORE_BANDS if v >= b["min"])
+def band_label(band: str) -> str:
+    return BAND_LABELS.get(str(band), BAND_LABELS["none"])

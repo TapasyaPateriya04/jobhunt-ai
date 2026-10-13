@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from api import catalog
 from api.core import FeatureUnavailable, db_location, g, load, log, repo, score_of, setting, settings
+from api.matching_view import thresholds
 
 router = APIRouter()
 
@@ -33,9 +34,10 @@ def get_catalog() -> dict:
         "statuses": [{"key": s, "label": catalog.status_name(s)} for s in catalog.MATCH_STATUSES],
         "tracked_statuses": [{"key": s, "label": catalog.status_name(s), "hint": catalog.TRACK_HINTS[s]}
                              for s in catalog.TRACKED_STATUSES],
-        "bands": catalog.SCORE_BANDS,
+        "bands": _bands(),
         "score_parts": catalog.SCORE_PARTS,
         "score_note": catalog.SCORE_NOTE,
+        "score_guide": _score_guide(),
         "doc_types": [{"key": k, "label": v} for k, v in catalog.DOC_TYPES.items()],
         "sorts": catalog.SORTS,
         "collection_note": [{"title": t, "body": b} for t, b in catalog.COLLECTION_NOTE],
@@ -44,6 +46,33 @@ def get_catalog() -> dict:
         "refresh_minutes": int(setting("jobspy_refresh_minutes", 60) or 60),
         "auto_refresh_offered": bool(opt_in) and bool(setting("jobspy_auto_refresh", True)),
     }
+
+
+def _numbers() -> dict:
+    """The score thresholds, or the ones the glossary was written with when scoring is unavailable."""
+    try:
+        return thresholds()
+    except Exception:
+        log.warning("Could not read the score thresholds")
+        return {"strong": 40.0, "possible": 25.0, "strong_skills": 35.0, "possible_skills": 20.0,
+                "title_cap": 30.0}
+
+
+def _bands() -> list:
+    """The three bands, highest first, so a screen can group jobs by them."""
+    n = _numbers()
+    return [{"key": "strong", "label": catalog.band_label("strong"), "min": n["strong"]},
+            {"key": "possible", "label": catalog.band_label("possible"), "min": n["possible"]},
+            {"key": "weak", "label": catalog.band_label("weak"), "min": 0.0}]
+
+
+def _score_guide() -> list:
+    """What the scores mean, with the numbers filled in from the scoring module."""
+    n = _numbers()
+    numbers = {key: f"{value:.0f}" for key, value in n.items()}
+    numbers["strong_minus"] = f"{n['strong'] - 1:.0f}"
+    return [{"title": title, "lines": [line.format(**numbers) for line in lines]}
+            for title, lines in catalog.SCORE_GUIDE]
 
 
 @router.get("/countries")
@@ -91,7 +120,9 @@ def get_overview(resume_id: int | None = None) -> dict:
     resume = _resume(resume_id)
     matches = _matches(resume)
     jobs = int(db_counts().get("jobs", 0) or 0)
-    strong = sum(1 for m in matches if score_of(m) >= 50 and g(m, "status", default="new") != "hidden")
+    strong_at = _numbers()["strong"]
+    strong = sum(1 for m in matches
+                 if score_of(m) >= strong_at and g(m, "status", default="new") != "hidden")
     counts = {s: sum(1 for m in matches if g(m, "status", default="new") == s)
               for s in catalog.MATCH_STATUSES}
     return {

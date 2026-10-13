@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from api import catalog
 from api.core import g, jsonable, llm_error, load, log, repo, score_of, settings
+from api.matching_view import band_of
 from api.routes_meta import GEMINI, ollama_reachable
 
 router = APIRouter()
@@ -47,7 +48,7 @@ def draftable_jobs(resume_id: int) -> dict:
         "status": g(m, "status", default="new"),
         "status_label": catalog.status_name(g(m, "status", default="new")),
         "score": round(score_of(m), 1),
-        "band_label": catalog.score_band(score_of(m))["label"],
+        "band_label": catalog.band_label(band_of(score_of(m))),
         "source_name": catalog.source_name(g(m, "source", default="")),
         "posted_date": jsonable(g(m, "posted_date")),
     } for m in matches]}

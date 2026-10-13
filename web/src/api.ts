@@ -149,7 +149,9 @@ export type Source = {
   opt_in: boolean;
 };
 
-export type ScorePart = { key: string; label: string; weight: number; about: string };
+export type ScorePart = { key: string; label: string; group: "fit" | "reach"; share: number; about: string };
+
+export type GuideSection = { title: string; lines: string[] };
 
 export type Catalog = {
   sources: Source[];
@@ -158,6 +160,7 @@ export type Catalog = {
   bands: { key: string; label: string; min: number }[];
   score_parts: ScorePart[];
   score_note: string;
+  score_guide: GuideSection[];
   doc_types: { key: string; label: string }[];
   sorts: string[];
   collection_note: { title: string; body: string }[];
@@ -259,6 +262,7 @@ export type Match = {
 
 export type MatchList = {
   matches: Match[];
+  rescored: number;
   country: string;
   cities: string[];
   candidate_years: number;
