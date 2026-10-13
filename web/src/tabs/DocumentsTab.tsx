@@ -209,7 +209,7 @@ export function DocumentsTab() {
           </div>
           {!writer.data?.ready && (
             <Notice tone="warn">
-              No language model is ready. Start Ollama with ollama serve, or set GEMINI_API_KEY in .env.
+              No language model is ready. Start Ollama, or connect a Gemini API key.
             </Notice>
           )}
           {note && <Notice tone={tone}>{note}</Notice>}

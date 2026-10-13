@@ -94,7 +94,7 @@ export function JobsTab() {
             </Field>
           </div>
 
-          <Field label={`Most jobs to collect: ${maxJobs}`} help={`The cap from .env is ${cap} per search.`}>
+          <Field label={`Most jobs to collect: ${maxJobs}`} help={`Up to ${cap} per search.`}>
             <input
               type="range"
               min={5}
@@ -126,7 +126,7 @@ export function JobsTab() {
                     <span style={{ fontWeight: 500 }}>{source.name}</span>
                     <br />
                     <span className="hint">
-                      {source.configured ? source.about : "Not configured in .env, so there is nothing to read."}
+                      {source.configured ? source.about : "Not connected"}
                     </span>
                   </span>
                 </label>
@@ -283,7 +283,7 @@ function AutoRefresh() {
         <span>Search them again every {minutes} minutes while this page is open</span>
       </label>
       <p className="hint">
-        Uses the keywords and location above. Each site is searched at most once per the wait set in .env, counting
+        Uses the keywords and location above. Each site is searched at most once per the configured wait, counting
         the searches you start yourself.
       </p>
       {last && <p className="hint">Last searched: {last}.</p>}

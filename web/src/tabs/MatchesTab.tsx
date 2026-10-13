@@ -148,7 +148,7 @@ export function MatchesTab() {
           <div style={{ flex: "1 1 240px" }}>
             <Field
               label="Your country"
-              help="Jobs restricted to other countries, time zones or languages are ranked down. CANDIDATE_COUNTRY in .env sets the default."
+              help="Jobs restricted to other countries, time zones or languages are ranked down."
             >
               <select value={country ?? ""} onChange={(event) => setCountry(event.target.value)}>
                 <option value="">Ignore location</option>
@@ -615,7 +615,9 @@ function Detail({ group, onChanged }: { group: Group; onChanged: () => void }) {
   useEffect(() => {
     setLlmRequirements(null);
     setShowPosting(false);
-  }, [match.id]);
+    document.title = `${match.title} - ${match.company} · ${Math.round(match.score)} | JobHunt AI`;
+    return () => { document.title = "JobHunt AI"; };
+  }, [match.id, match.title, match.company, match.score]);
 
   const parts = useMemo(
     () =>

@@ -56,13 +56,13 @@ export function Sidebar() {
           label="Gemini"
           ok={Boolean(status?.gemini.configured)}
           okText="API key configured"
-          badText="not set up (no GEMINI_API_KEY)"
+          badText="Not connected"
         />
         {status && status.models.length > 0 && (
           <div style={{ marginTop: 10 }}>
             <Field
               label="Model for writing"
-              help="Smaller models write faster on a laptop without a graphics card. Install more with ollama pull."
+              help="Smaller models write faster on a laptop without a graphics card."
             >
               <select value={model ?? ""} onChange={(event) => setModel(event.target.value)}>
                 {status.models.map((name) => (
