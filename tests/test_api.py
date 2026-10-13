@@ -114,7 +114,7 @@ def test_the_whole_flow(client):
     assert match["title"] == "Java Backend Developer"
     assert match["score"] > 0
     assert match["band"] in {"strong", "possible", "weak"}
-    assert match["band_label"].endswith("match")
+    assert match["band_label"] in {"Strong fit", "Worth a look", "Reach"}
     assert set(match["parts"]) == {"ats", "experience", "semantic", "freshness"}
     assert match["location_status"] == "local"
     assert "Java" in match["gap"]["required"]

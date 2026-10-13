@@ -130,7 +130,7 @@ def get_overview(resume_id: int | None = None) -> dict:
         "stats": [
             {"value": jobs, "label": _plural(jobs, "job collected", "jobs collected")},
             {"value": len(matches), "label": "scored for this resume"},
-            {"value": strong, "label": _plural(strong, "strong match", "strong matches")},
+            {"value": strong, "label": _plural(strong, "strong fit", "strong fits")},
             {"value": counts["saved"], "label": "saved"},
             {"value": counts["applied"], "label": "applied"},
         ],

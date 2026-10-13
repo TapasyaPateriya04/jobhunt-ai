@@ -236,7 +236,7 @@ def render_overview(resume: dict | None) -> None:
     jobs = int(db_counts().get("Jobs", 0) or 0)
     if resume and (jobs or matches):
         strong = sum(1 for m in matches if _score_of(m) >= c.STRONG_AT and g(m, "status", default="new") != "hidden")
-        cells = [(jobs, "jobs collected"), (len(matches), "scored for this resume"), (strong, "strong matches"),
+        cells = [(jobs, "jobs collected"), (len(matches), "scored for this resume"), (strong, "strong fits"),
                  (_count(matches, "saved"), "saved"), (_count(matches, "applied"), "applied")]
         st.markdown('<div class="jh-stat">' + "".join(f"<div><b>{n}</b><span>{label}</span></div>"
                                                       for n, label in cells) + "</div>", unsafe_allow_html=True)
@@ -952,8 +952,8 @@ def tab_matches(resume: dict | None, settings=None) -> None:
             s2.button("Reset filters", key="filter_reset_btn", use_container_width=True, on_click=_reset_filters)
             f = st.columns(2)
             min_score = f[0].slider("Minimum match score", 0, 100, 0, step=5, key=f"f_min{k}",
-                                    help=f"{c.STRONG_AT:.0f} and above is a strong match, {c.POSSIBLE_AT:.0f} to "
-                                         f"{c.STRONG_AT - 1:.0f} a possible one. See \"What do the scores mean?\".")
+                                    help=f"{c.STRONG_AT:.0f} and above is a strong fit, {c.POSSIBLE_AT:.0f} to "
+                                         f"{c.STRONG_AT - 1:.0f} worth a look. See \"What do the scores mean?\".")
             default_years = min(ANY_YEARS, int(my_years + 0.999) + 2)
             max_years = f[1].slider("Asks for at most (years)", 0, ANY_YEARS, default_years,
                                     key=f"f_years{k}_{default_years}",

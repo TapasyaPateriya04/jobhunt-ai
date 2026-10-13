@@ -314,7 +314,7 @@ def test_score_breakdown_and_summary_strip(ui_env):
     html = " ".join(m.value for m in at.markdown)
     assert "jh-bars" in html and "Skills and keywords" in html and "Experience fit" in html
     assert 'class="jh-strip"' in html and "<b>1</b> of 1 jobs" in html
-    assert "jh-score hi" in html  # 72.5 is a strong match
+    assert "jh-score hi" in html  # 72.5 is a strong fit
 
 
 def test_overview_names_the_next_step(ui_env):
@@ -324,7 +324,7 @@ def test_overview_names_the_next_step(ui_env):
     at = _run()
     _assert_clean(at)
     text = " ".join(m.value for m in at.markdown)
-    assert "<b>1</b><span>strong matches</span>" in text and "press <b>Save</b>" in text
+    assert "<b>1</b><span>strong fits</span>" in text and "press <b>Save</b>" in text
     # Saving a job moves the next step on to writing for it.
     from db import repository as repo
 
@@ -336,9 +336,9 @@ def test_score_is_labelled_in_words(ui_env):
     from ui import components as c
 
     assert [c.score_label(v) for v in (72, 30, 10, None)] == [
-        "Strong match", "Possible match", "Weak match", "Not scored"]
+        "Strong fit", "Worth a look", "Reach", "Not scored"]
     card = c.job_card_html({"title": "T", "company": "C"}, score=30)
-    assert "jh-score mid" in card and "Possible match" in card and 'aria-label="Match score 30 out of 100' in card
+    assert "jh-score mid" in card and "Worth a look" in card and 'aria-label="Match score 30 out of 100' in card
 
 
 def test_applications_tab_tracks_saved_jobs(ui_env):

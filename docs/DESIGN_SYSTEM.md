@@ -154,7 +154,7 @@ Score bands and status, each a text colour, a tint and a border (`--ok`, `--warn
 | Applied, saved | `#33516B` / `#E2E8EE` | `#8FB0CE` / `#1C2430` |
 | Hidden, rejected | `#6E675D` / `#EFE9DE` | `#978F82` / `#26241F` |
 
-The band words themselves come from `api/catalog.py` ("Strong match", "Possible match"), so they
+The band words themselves come from `api/catalog.py` ("Strong fit", "Worth a look", "Reach"), so they
 stay the same as Streamlit's.
 
 Older names (`--surface`, `--wash`, `--ink-2`, `--hover`) are aliases of `--card`, `--sunk`,

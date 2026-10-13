@@ -31,7 +31,7 @@ BOARD_SOURCES = ["greenhouse", "lever"]
 
 # Band keys come from matching.confidence_score.band(); the thresholds are read from there
 # at run time (api/routes_meta.py) so the two front ends can never show different numbers.
-BAND_LABELS = {"strong": "Strong match", "possible": "Possible match", "weak": "Weak match",
+BAND_LABELS = {"strong": "Strong fit", "possible": "Worth a look", "weak": "Reach",
                "none": "Not scored"}
 
 # What each part of the score measures, shown next to the breakdown bars. "group" is the half
@@ -64,7 +64,7 @@ SCORE_GUIDE = [
       "fit; one you cannot reach yet keeps 40% of it.",
       "The total is then lowered if the job is not open to your country."]),
     ("What the bands mean",
-     ["Strong match is {strong} and above, possible {possible} to {strong_minus}, weak below "
+     ["Strong fit is {strong} and above, worth a look {possible} to {strong_minus}, reach below "
       "{possible}.",
       "A job can only be strong when its skills score is {strong_skills} or more, and only "
       "possible when it is {possible_skills} or more, so experience and freshness alone never "

@@ -423,8 +423,8 @@ to reach for you right now. It is worked out in two halves:
   fit; one you cannot reach yet keeps 40% of it.
 - Then it is lowered if the job is not open to your country.
 
-**Strong match** is {STRONG_AT:.0f} and above, **possible** {POSSIBLE_AT:.0f} to {STRONG_AT - 1:.0f},
-**weak** below {POSSIBLE_AT:.0f}. A job can only be strong when its skills score is 35 or more,
+**Strong fit** is {STRONG_AT:.0f} and above, **worth a look** {POSSIBLE_AT:.0f} to {STRONG_AT - 1:.0f},
+**reach** below {POSSIBLE_AT:.0f}. A job can only be strong when its skills score is 35 or more,
 and only possible when it is 20 or more, so experience and freshness alone never make a job look good.
 
 **The parts (each 0 to 100):**
@@ -450,7 +450,7 @@ def score_help(key: str) -> None:
         st.markdown(SCORE_GLOSSARY)
 
 
-SCORE_LABELS = {"hi": "Strong match", "mid": "Possible match", "low": "Weak match"}
+SCORE_LABELS = {"hi": "Strong fit", "mid": "Worth a look", "low": "Reach"}
 
 
 def score_label(value: Any) -> str:

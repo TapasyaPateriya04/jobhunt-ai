@@ -953,5 +953,5 @@ function bandHelp(catalog: Catalog | null): string {
   const bands = catalog?.bands ?? [];
   if (bands.length < 2) return "Higher is a better match.";
   const [strong, possible] = bands;
-  return `${strong.min} and above is a ${strong.label.toLowerCase()}, ${possible.min} to ${strong.min - 1} a ${possible.label.toLowerCase()}.`;
+  return `${strong.label}: ${strong.min} and above. ${possible.label}: ${possible.min} to ${strong.min - 1}.`;
 }
