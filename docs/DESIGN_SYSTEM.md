@@ -53,7 +53,7 @@ values into new code):
 | Background | `#F7F6F2` warm paper; sidebar and fills `#EFEDE7` |
 | Cards, panels, inputs (secondary background) | `#FFFFFF` |
 | Text / secondary / muted | `#17171C` / `#3D3D47` / `#64646F` |
-| Borders | `#E4E1D8` |
+| Borders | `#DEDACD` |
 | Good / warning / problem | `#15803D` / `#A34D08` / `#B42318` |
 | Radius | 10 px (buttons 8 px) |
 
@@ -139,9 +139,9 @@ denser. Every number that is compared (scores, years, counts) is set in Geist Mo
 
 Patterns, beyond the ones above:
 
-- **Page frame**: a sticky bar with the wordmark, the title and one line of purpose, then a
-  sidebar (resume in use, language model, storage) beside the tabbed main column. Below 1000 px
-  the sidebar moves under the tabs; below 768 px every grid is one column.
+- **Page frame**: a sticky bar with the wordmark, then a sidebar (resume in use, language
+  model, storage) beside the tabbed main column. Below 1000 px the sidebar moves under the
+  tabs; below 768 px every grid is one column. No redundant heading below the bar.
 - **Tabs**: the same segmented bar as Streamlit. On a phone the bar scrolls and the tab in use
   is scrolled into view.
 - **Matches**: a list on the left and the job you picked on the right (`.split`). On a wide
@@ -169,5 +169,17 @@ Patterns, beyond the ones above:
 - **Feedback**: a `.notice` under the control that caused it, in one of four tones, which clears
   itself after a few seconds. Never a traceback: the API sends a sentence and the screen shows it.
 - **Drafts**: the cover letter streams into the editor as the model writes it, with a Stop button.
+- **Dark mode**: all CSS custom properties are redefined under `@media (prefers-color-scheme:
+  dark)` so the app follows the OS theme automatically.
+- **Skill chips**: matched skills use the quiet default style (grey wash); missing skills use
+  the loud red/bad style, so the gap stands out.
+- **Score typography**: 1.375rem (~22px) Geist Mono with `font-variant-numeric: tabular-nums`
+  so columns of scores align their digits.
+- **Skeleton loading**: placeholder cards appear only after a 200 ms delay, so a fast response
+  never flashes grey boxes. Tab data is cached per key so switching tabs shows previous data
+  instantly while refetching.
+- **Document title**: set to "Title - Company . Score | JobHunt AI" when a match is selected.
+- **Job list keyboard**: `role="listbox"` with `role="option"` rows; arrow up/down moves focus
+  and selection.
 - **Motion**: the same 160 ms hover and colour changes, switched off under
   `prefers-reduced-motion`. No scroll or cursor animation.
