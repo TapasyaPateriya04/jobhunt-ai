@@ -63,6 +63,12 @@ class Settings:
     lever_companies: tuple[str, ...] = ()
     candidate_country: str = ""
     candidate_cities: tuple[str, ...] = ()
+    # JobSpy sites (linkedin, naukri). Off unless listed: these sites forbid automated access.
+    jobspy_sites: tuple[str, ...] = ()
+    jobspy_refresh_minutes: int = 60
+    jobspy_hours_old: int = 72
+    jobspy_results_per_site: int = 15
+    jobspy_auto_refresh: bool = True
 
 
 def _env_list(name: str) -> tuple[str, ...]:
@@ -89,4 +95,9 @@ def get_settings(env_file: Optional[str | os.PathLike[str]] = None) -> Settings:
         lever_companies=_env_list("LEVER_COMPANIES"),
         candidate_country=(os.getenv("CANDIDATE_COUNTRY") or "").strip(),
         candidate_cities=_env_list("CANDIDATE_CITIES"),
+        jobspy_sites=tuple(s.lower() for s in _env_list("JOBSPY_SITES")),
+        jobspy_refresh_minutes=_env_int("JOBSPY_REFRESH_MINUTES", 60, minimum=30),
+        jobspy_hours_old=_env_int("JOBSPY_HOURS_OLD", 72),
+        jobspy_results_per_site=min(50, _env_int("JOBSPY_RESULTS_PER_SITE", 15)),
+        jobspy_auto_refresh=_env_bool("JOBSPY_AUTO_REFRESH", True),
     )

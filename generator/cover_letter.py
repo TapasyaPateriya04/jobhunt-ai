@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 
 from generator.fact_check import experience_level
-from generator.llm import call_llm
+from generator.llm import call_llm, stream_llm
 from security.prompt_guard import wrap_untrusted
 
 RESUME_CHARS = 2500
@@ -52,3 +52,11 @@ def _clean_output(text: str) -> str:
 
 def generate_cover_letter(resume: dict, job: dict, model: str | None = None) -> str:
     return _clean_output(call_llm(build_cover_letter_prompt(resume or {}, job or {}), model=model))
+
+
+def stream_cover_letter(resume: dict, job: dict, model: str | None = None):
+    """The letter as it is written (for the UI); pass the joined text to ``clean_cover_letter``."""
+    return stream_llm(build_cover_letter_prompt(resume or {}, job or {}), model=model)
+
+
+clean_cover_letter = _clean_output

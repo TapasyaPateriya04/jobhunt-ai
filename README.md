@@ -2,7 +2,9 @@
 
 A local-first job hunting assistant that costs ₹0/month. It scrapes job listings, parses your resume,
 scores how well you match each job, and drafts cover letters and resume edits with a free LLM.
-Everything runs on your laptop. The full plan lives in [docs/SPEC.md](docs/SPEC.md).
+Everything runs on your laptop. The original plan is [docs/SPEC.md](docs/SPEC.md); the living
+project docs (PRD, design system, architecture, database, security, code style, testing) are
+listed in [AGENTS.md](AGENTS.md).
 
 | Layer | Tool |
 |-------|------|
@@ -19,7 +21,7 @@ Everything runs on your laptop. The full plan lives in [docs/SPEC.md](docs/SPEC.
 Resume (.tex/.txt/.md/.pdf) ─► parser ─► SQLite ◄─ scraper (RemoteOK, HN, The Muse, Arbeitnow, ...)
                                             │
                                             ▼
-                         matching: 0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness
+                         matching: fit (skills, meaning) x reach (experience, freshness)
                                             │
                                             ▼
                      Streamlit dashboard ─► cover letter / resume suggestions (Ollama or Gemini)
@@ -110,6 +112,7 @@ tests/           pytest suite (no network, no heavy models needed)
 | Greenhouse boards | `greenhouse` | Companies you list in `GREENHOUSE_BOARDS` (e.g. `gitlab`). |
 | Himalayas | `himalayas` | Free public API of remote jobs. Searches your keywords and keeps jobs open to the country in your location (e.g. "India"), including worldwide ones. On by default. |
 | Lever boards | `lever` | Companies you list in `LEVER_COMPANIES` (e.g. `palantir`). |
+| LinkedIn, Naukri | `linkedin`, `naukri` | Opt-in exception, through [JobSpy](https://github.com/speedyapply/JobSpy): only when listed in `JOBSPY_SITES`, at most once per `JOBSPY_REFRESH_MINUTES` (60 by default). See *Ethical scraping*. |
 
 The Muse has no keyword search and its own spelling of places. "India" is expanded into its
 tech cities (your `CANDIDATE_CITIES` first), and common spellings such as Bengaluru or Gurugram are
@@ -131,12 +134,14 @@ numbers and the next step to take.
 - **Resume tab**: upload a resume, or a newer version of it (skills you added by hand carry over,
   and your stored jobs are scored against it straight away). Type skills your file doesn't
   mention into **Add a skill**. Switch between stored resumes in the sidebar.
-- **Find jobs tab**: collect postings from the sources you pick. At the bottom, **Back up or clean
+- **Find jobs tab**: collect postings from the sources you pick. **Add a job yourself** stores a
+  posting you paste (from LinkedIn or anywhere) with its link, without the app visiting it. With
+  `JOBSPY_SITES` set, a toggle refreshes LinkedIn and Naukri while the page is open. At the bottom, **Back up or clean
   up stored jobs** downloads jobs and scores as CSV and deletes postings older than a number of
   days you choose (30 by default). Jobs you saved, applied to or wrote a document for are kept.
 - **Matches tab**: search by title, company, location or skill; sliders, checkboxes and dropdowns
   narrow the list; **Reset filters** clears them. Each card shows the score with its band
-  (strong 50+, possible 35 to 49, weak), the years asked, whether you can take the job and the
+  (strong 40+, possible 25 to 39, weak), the years asked, whether you can take the job and the
   skills you have (✓) and lack (✕). **Save** and **Hide** work from the card; the expander holds
   the score breakdown, must-have skills and the full posting. **Skills worth adding** lists jobs
   only 1 to 3 skills short. After scraping, adding skills or changing your country, click
@@ -145,6 +150,8 @@ numbers and the next step to take.
   **Write documents** picks the job on the Documents tab.
 - **Documents tab**: draft a cover letter or resume suggestions with the local model (or Gemini),
   edit the draft and download it as .txt, .docx or .pdf.
+- **Privacy policy and Terms**: linked from the footer of every page; they say what stays on your
+  laptop, what is sent where, and the rules for the opt-in LinkedIn and Naukri source.
 
 ### Demo video
 
@@ -179,7 +186,19 @@ to PostgreSQL later means changing `DATABASE_URL` and running `alembic upgrade h
 
 ## Matching quality
 
-The score is `0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness`:
+The score multiplies how well the job fits by how reachable it is (since 2026-10-12):
+
+```
+fit   = 0.6 ATS + 0.4 semantic
+reach = 0.75 experience + 0.25 freshness
+total = fit x (0.4 + 0.6 x reach / 100)     strong 40+, possible 25-39, weak below 25
+```
+
+Fit is the ceiling, so experience and freshness can no longer lift a job whose skills barely
+match (a job matching only "AI" used to reach 51, "strong"). A job is never strong with a skills
+score under 35, nor possible under 20, and the skills score is capped at 30 when the job title
+names a skill you lack ("Databricks Developer"). The Matches tab explains this under **What the
+scores mean**. When the formula changes (`SCORING_VERSION`), stored jobs are scored again once.
 
 - **ATS**: half TF-IDF keyword overlap, half skill coverage (share of the posting's known skills
   that are on your resume).
@@ -193,7 +212,8 @@ The score is `0.35 ATS + 0.30 experience + 0.25 semantic + 0.10 freshness`:
   or restricted to other countries, time zones or a language you were not asked about. The Matches
   tab can hide those jobs and filter by the years of experience a posting asks for.
 
-These weights differ from the plan's 0.35/0.25/0.20/0.20 because they were measured:
+The earlier weighted sum (0.35/0.30/0.25/0.10) was tuned on labelled jobs; re-check the new
+formula the same way:
 
 ```bash
 python scripts/evaluate_matching.py --snapshot   # once: copy the labeled jobs from your database
@@ -231,9 +251,18 @@ Prefer the official/free APIs above. Every request checks `robots.txt`, waits be
 each session is capped at 50 jobs. RemoteOK asks that you link back to the job and credit
 it as the source; the stored job URL does that.
 
-Naukri, LinkedIn and Indeed are not used. Naukri answers automated browsers with "Access Denied",
-LinkedIn's `robots.txt` disallows its job search, and Indeed sits behind bot protection; all three
-restrict scraping in their terms. Their old browser scrapers were removed rather than left to fail.
+Naukri, LinkedIn and Indeed are not used by default. Naukri answers automated browsers with "Access
+Denied", LinkedIn's `robots.txt` disallows every crawler, and Indeed sits behind bot protection; all
+three restrict scraping in their terms. Their old browser scrapers were removed rather than left to fail.
+
+The one exception is opt-in: listing `linkedin` or `naukri` in `JOBSPY_SITES` searches them through
+JobSpy, outside the robots check, on your own responsibility. Requests come from your network's IP and
+a site may answer with "429 Too Many Requests" or block it for a while; your LinkedIn account is not
+involved because nothing logs in. To keep the load low, no proxies are used, each site is searched at
+most once per `JOBSPY_REFRESH_MINUTES` (30 at least, 60 by default; the last run is kept in
+`DOCS_DIR/.jobspy_last_run.json`, so a restart does not reset the wait, and a failed run waits too),
+results are capped by `JOBSPY_RESULTS_PER_SITE` and `JOBSPY_HOURS_OLD`, and JobSpy stops a site at its
+first refused request. Without the opt-in, paste a LinkedIn posting under **Add a job yourself**.
 SmartRecruiters, Ashby and Adzuna also offer job APIs, but their `robots.txt` disallows (or will not
-serve) access for this app, so they are not used either: there are no exemptions from the robots
-check. See [SECURITY.md](SECURITY.md).
+serve) access for this app, so they are not used either: apart from the JobSpy opt-in above,
+there are no exemptions from the robots check. See [SECURITY.md](SECURITY.md).

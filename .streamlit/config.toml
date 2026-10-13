@@ -3,6 +3,8 @@ address = "localhost"
 maxUploadSize = 2
 headless = true
 enableXsrfProtection = true
+# Serves ui/static (the bundled Geist fonts) so the app needs no font CDN.
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false
@@ -10,11 +12,52 @@ gatherUsageStats = false
 [client]
 showErrorDetails = false
 toolbarMode = "minimal"
+# The privacy and terms pages are linked from the footer, not listed in the sidebar.
+showSidebarNavigation = false
 
 [theme]
+# JobHunt AI palette: ink on warm paper, one indigo accent. ui/components.py repeats these
+# values as --jh-* tokens for the app's own markup; change both together.
 base = "light"
-primaryColor = "#0F766E"
-backgroundColor = "#F8FAFC"
-secondaryBackgroundColor = "#F1F5F9"
-textColor = "#0F172A"
-font = "sans serif"
+primaryColor = "#4F46E5"
+backgroundColor = "#F7F6F2"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#17171C"
+linkColor = "#4338CA"
+borderColor = "#E4E1D8"
+dataframeBorderColor = "#E4E1D8"
+dataframeHeaderBackgroundColor = "#F2F0EA"
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "10px"
+buttonRadius = "8px"
+redColor = "#B42318"
+orangeColor = "#A34D08"
+greenColor = "#15803D"
+blueColor = "#4F46E5"
+violetColor = "#6D28D9"
+chartCategoricalColors = ["#4F46E5", "#0F766E", "#C2410C", "#A16207", "#7C3AED", "#64646F"]
+
+# One type family everywhere: Geist for text and headings, Geist Mono for code. Both are
+# bundled in ui/static/fonts (SIL Open Font License), so nothing loads from the internet.
+font = "Geist, sans-serif"
+headingFont = "Geist, sans-serif"
+codeFont = "'Geist Mono', monospace"
+baseFontSize = 15
+headingFontWeights = [700, 650, 650, 600, 600, 600]
+
+[[theme.fontFaces]]
+family = "Geist"
+url = "app/static/fonts/Geist-Variable.woff2"
+weight = "100 900"
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Geist Mono"
+url = "app/static/fonts/GeistMono-Variable.woff2"
+weight = "100 900"
+style = "normal"
+
+[theme.sidebar]
+backgroundColor = "#EFEDE7"
+secondaryBackgroundColor = "#FFFFFF"

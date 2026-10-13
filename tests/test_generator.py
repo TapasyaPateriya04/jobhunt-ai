@@ -72,6 +72,7 @@ def test_call_llm_ollama_success(monkeypatch):
     assert llm.call_llm("hi") == "Hello!"
     assert seen["url"] == "http://localhost:11434/api/generate"
     assert seen["json"]["model"] == "mistral" and seen["json"]["stream"] is True and seen["stream"]
+    assert seen["json"]["think"] is False  # qwen3.5 and other thinking models answer directly
     assert seen["timeout"] and seen["resp"].closed
 
 
@@ -280,3 +281,19 @@ def test_analyze_requirements_llm_keeps_only_skills_in_posting(monkeypatch):
 
     monkeypatch.setattr(jd_insights, "call_llm", lambda prompt, **_: "I cannot answer that.")
     assert jd_insights.analyze_requirements_llm(job)["source"] == "rules"  # unusable answer -> rules
+
+
+def test_stream_llm_yields_pieces_and_skips_thinking(monkeypatch):
+    chunks = [{"response": "", "thinking": "Let me plan"}, {"response": "Dear "}, {"response": "Hiring"},
+              {"response": "", "done": True}]
+    monkeypatch.setattr(requests, "post", lambda *a, **k: FakeResp({}, lines=chunks))
+    assert list(llm.stream_llm("hi")) == ["Dear ", "Hiring"]
+
+
+def test_only_thinking_is_reported_as_empty_not_as_no_model(monkeypatch):
+    chunks = [{"response": "", "thinking": "hmm"}, {"response": "", "done": True}]
+    monkeypatch.setattr(requests, "post", lambda *a, **k: FakeResp({}, lines=chunks))
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    with pytest.raises(llm.LLMUnavailable) as ei:
+        llm.call_llm("hi", model="qwen3.5:4b")
+    assert "qwen3.5:4b) returned an empty response" in str(ei.value)

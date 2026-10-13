@@ -12,7 +12,10 @@ from config import get_settings
 DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow", "himalayas"]
 # Company career boards: they need the companies listed in .env.
 BOARD_SOURCES = ["greenhouse", "lever"]
-ALL_SOURCES = DEFAULT_SOURCES + BOARD_SOURCES
+# Sites that forbid automated access, read through JobSpy only when listed in JOBSPY_SITES
+# and at most once per JOBSPY_REFRESH_MINUTES (see scraper/jobspy_source.py).
+JOBSPY_SOURCES = ["linkedin", "naukri"]
+ALL_SOURCES = DEFAULT_SOURCES + BOARD_SOURCES + JOBSPY_SOURCES
 
 
 def _source_fn(name: str) -> Callable[[str, str, int], list[dict]] | None:
@@ -35,6 +38,9 @@ def _source_fn(name: str) -> Callable[[str, str, int], list[dict]] | None:
     if name == "lever":
         from scraper.ats_boards import fetch_lever
         return lambda kw, loc, n: fetch_lever(kw, max_jobs=n, location=loc)
+    if name in JOBSPY_SOURCES:
+        from scraper.jobspy_source import fetch_jobspy
+        return lambda kw, loc, n: fetch_jobspy(name, kw, loc, max_jobs=n)
     if name == "himalayas":
         from scraper.himalayas_scraper import fetch_himalayas
         return lambda kw, loc, n: fetch_himalayas(kw, loc, max_jobs=n)

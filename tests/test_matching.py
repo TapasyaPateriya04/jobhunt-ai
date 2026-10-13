@@ -246,7 +246,9 @@ def test_confidence_keys_bounds_and_weights():
     assert SCORE_KEYS <= set(s)
     for k in SCORE_KEYS:
         assert 0 <= s[k] <= 100
-    expected = sum(WEIGHTS[k] * s[k] for k in WEIGHTS)
+    from matching.confidence_score import combine_parts
+
+    expected = combine_parts(s["ats"], s["semantic"], s["experience"], s["freshness"])
     assert s["total"] == pytest.approx(expected, abs=0.2)
     assert s["ats"] >= s["ats_raw"]  # calibration lifts low raw cosines
     assert s["required_years"] == 3  # parsed from description
@@ -317,3 +319,39 @@ def test_hand_added_skills_raise_the_score():
     after = calculate_confidence_score({**resume, "extra_skills": ["Kafka", "AWS"]}, job)
     assert before["skill_coverage"] == 40.0 and after["skill_coverage"] == 80.0
     assert after["ats"] > before["ats"] and after["total"] > before["total"]
+
+
+# ---------------------------------------------------------------- fit x reach, bands and caps
+def test_experience_and_freshness_cannot_make_a_job_strong():
+    from matching.confidence_score import band, combine_parts
+
+    # The Cisco case: one matching skill, perfect reach. Used to be 51, "strong".
+    assert band(combine_parts(ats=22, sem=31, exp=84, fresh=100)) != "strong"
+    assert band(combine_parts(ats=10, sem=90, exp=100, fresh=100)) == "weak"   # skills under 20
+    assert band(combine_parts(ats=30, sem=95, exp=100, fresh=100)) == "possible"  # skills under 35
+
+
+def test_fit_is_the_ceiling_and_reach_scales_it():
+    from matching.confidence_score import combine_parts
+
+    assert combine_parts(ats=80, sem=60, exp=100, fresh=100) == pytest.approx(72.0)
+    assert combine_parts(ats=80, sem=60, exp=0, fresh=0) == pytest.approx(72.0 * 0.4)
+    assert combine_parts(ats=80, sem=60, exp=100, fresh=30) < combine_parts(ats=80, sem=60, exp=100, fresh=100)
+
+
+def test_missing_skill_named_in_the_title_caps_the_skills_score():
+    resume = {"raw_text": "Python, SQL, Spark, Airflow, AWS. Data engineer.",
+              "experience": [{"title": "Data Engineer", "dates": "2018 - 2024"}]}
+    job = {"title": "Databricks Developer",
+           "description": "Databricks, Python, SQL, Spark, Airflow and AWS. 2+ years experience."}
+    s = calculate_confidence_score(resume, job, country="")
+    assert s["missing_title_skills"] == ["Databricks"] and s["ats"] <= 30
+    assert s["band"] != "strong"
+
+
+def test_ui_bands_match_the_scorer():
+    from matching import confidence_score as cs
+    from ui import components as c
+
+    assert (c.STRONG_AT, c.POSSIBLE_AT) == (cs.STRONG_AT, cs.POSSIBLE_AT)
+    assert c.score_label(cs.STRONG_AT) == "Strong match" and c.score_label(cs.POSSIBLE_AT - 1) == "Weak match"

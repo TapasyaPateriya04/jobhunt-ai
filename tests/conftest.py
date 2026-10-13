@@ -33,6 +33,8 @@ def no_home_country(monkeypatch):
     """Scores must not depend on the CANDIDATE_COUNTRY in a developer's own .env."""
     monkeypatch.setenv("CANDIDATE_COUNTRY", "")
     monkeypatch.setenv("CANDIDATE_CITIES", "")
+    # Tests never reach LinkedIn or Naukri, whatever JOBSPY_SITES a developer's .env lists.
+    monkeypatch.setenv("JOBSPY_SITES", "")
 
 
 @pytest.fixture

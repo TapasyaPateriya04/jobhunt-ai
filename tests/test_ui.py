@@ -1,6 +1,7 @@
 """Smoke tests for the Streamlit dashboard using streamlit.testing.v1.AppTest."""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,11 @@ def ui_env(tmp_path, monkeypatch):
     url = f"sqlite:///{(tmp_path / 'ui_test.db').as_posix()}"
     monkeypatch.setenv("DATABASE_URL", url)
     monkeypatch.setenv("DOCS_DIR", str(tmp_path / "docs"))
+    # Scores seeded by tests are current; the app must not re-score them on its own.
+    from matching.confidence_score import SCORING_VERSION
+
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / ".scoring_version").write_text(str(SCORING_VERSION))
     monkeypatch.setenv("USE_OLLAMA", "false")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     try:
@@ -111,7 +117,7 @@ def test_renders_with_resume_jobs_and_matches(ui_env):
     assert "jh-score" in cards[1] and ">72<" in cards[1]
     assert any(e.label == "Score breakdown, skills and full posting" for e in at.expander)
     assert {"Save", "Hide"} <= {b.label for b in at.button}
-    assert {"Minimum confidence", "Asks for at most (years)"} <= {s.label for s in at.slider}
+    assert {"Minimum match score", "Asks for at most (years)"} <= {s.label for s in at.slider}
     assert {"Your country", "Source", "Status", "Sort by"} <= {s.label for s in at.selectbox}
     assert {"Only jobs I can take", "Include jobs that state no years",
             "Show the full job description"} <= {c.label for c in at.checkbox}
@@ -329,10 +335,10 @@ def test_overview_names_the_next_step(ui_env):
 def test_score_is_labelled_in_words(ui_env):
     from ui import components as c
 
-    assert [c.score_label(v) for v in (72, 40, 10, None)] == [
+    assert [c.score_label(v) for v in (72, 30, 10, None)] == [
         "Strong match", "Possible match", "Weak match", "Not scored"]
-    card = c.job_card_html({"title": "T", "company": "C"}, score=40)
-    assert "jh-score mid" in card and "Possible match" in card and 'aria-label="Match score 40 out of 100' in card
+    card = c.job_card_html({"title": "T", "company": "C"}, score=30)
+    assert "jh-score mid" in card and "Possible match" in card and 'aria-label="Match score 30 out of 100' in card
 
 
 def test_applications_tab_tracks_saved_jobs(ui_env):
@@ -511,8 +517,9 @@ def test_model_picker_lists_ollama_models_and_reaches_the_generator(ui_env, monk
     monkeypatch.setattr(c, "ollama_models", lambda base: models)
     monkeypatch.setattr(c, "ollama_reachable", lambda base: True)
     used = {}
-    monkeypatch.setattr(cover_letter, "generate_cover_letter",
-                        lambda resume, job, model=None: used.setdefault("model", model) and "Dear Hiring Manager,")
+    monkeypatch.setattr(cover_letter, "stream_cover_letter",
+                        lambda resume, job, model=None: iter([used.setdefault("model", model) and "Dear Hiring ",
+                                                              "Manager,"]))
     _seed()
     at = _run()
     _assert_clean(at)
@@ -525,6 +532,24 @@ def test_model_picker_lists_ollama_models_and_reaches_the_generator(ui_env, monk
     _assert_clean(at)
     assert used["model"] == "llama3.2:3b"
     assert any("Written by llama3.2:3b" in cap.value for cap in at.caption)
+    assert next(t for t in at.text_area if t.label == "Edit before saving").value == "Dear Hiring Manager,"
+
+
+def test_generate_shows_the_real_llm_error(ui_env, monkeypatch):
+    import generator.cover_letter as cover_letter
+    from generator.llm import LLMUnavailable
+
+    def fail(resume, job, model=None):
+        raise LLMUnavailable("Ollama (qwen3.5:4b) took too long.")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(cover_letter, "stream_cover_letter", fail)
+    _seed()
+    at = _run()
+    next(b for b in at.button if b.label == "Generate").click().run()
+    _assert_clean(at)
+    warn = " ".join(w.value for w in at.warning)
+    assert "qwen3.5:4b) took too long" in warn and "ollama pull mistral" not in warn
 
 
 def test_draft_with_invented_claims_gets_a_warning(ui_env):
@@ -547,14 +572,118 @@ def test_find_jobs_starts_from_the_resume_and_scores_what_it_finds(ui_env, monke
     from db import repository as repo
 
     monkeypatch.setenv("CANDIDATE_COUNTRY", "India")
-    rid = repo.save_resume({**RESUME, "skills": ["SQL", "Java", "Python"]}, "resume.txt")
+    rid = repo.save_resume({**RESUME, "skills": ["SQL", "Python", "Java"],
+                            "raw_text": "Java developer: Java 17 services with Spring Boot; some Python."},
+                           "resume.txt")
     found = {**JOB, "title": "Java Developer", "url": "https://remoteok.com/remote-jobs/99"}
     monkeypatch.setattr(service, "scrape_jobs", lambda kw, loc, n, sources: [found])
     at = _run()
     _assert_clean(at)
-    assert at.text_input(key="scrape_keywords").value == "Java Developer"   # first language on the resume
+    assert at.text_input(key="scrape_keywords").value == "Java Developer"   # language the resume uses most
     assert at.text_input(key="scrape_location").value == "India"
     next(b for b in at.button if b.label == "Find jobs").click().run()
     _assert_clean(at)
     assert len(repo.list_matches(rid)) == 1                                  # scored without pressing anything
     assert any("All 1 stored jobs are scored" in s.value for s in at.success)
+
+
+def test_paste_a_linkedin_job_stores_and_scores_it(ui_env):
+    from db import repository as repo
+
+    _seed()
+    at = _run()
+    at.text_input(key="add_job_url").input("https://www.linkedin.com/jobs/view/4012345678/?trk=x")
+    at.text_area(key="add_job_text").input(
+        "Java Developer\nAcme · Bengaluru, India · 1 day ago\nAbout the job\nJava, Spring Boot and React.")
+    next(b for b in at.button if b.label == "Add job").click().run()
+    _assert_clean(at)
+    jobs = [j for j in repo.list_jobs(limit=50) if j["source"] == "linkedin"]
+    assert len(jobs) == 1 and jobs[0]["company"] == "Acme" and jobs[0]["location"] == "Bengaluru, India"
+    assert jobs[0]["url"] == "https://www.linkedin.com/jobs/view/4012345678/"
+    assert any("Added **Java Developer** at **Acme**" in s.value for s in at.success)
+
+
+def test_add_job_needs_pasted_text(ui_env):
+    at = _run()
+    next(b for b in at.button if b.label == "Add job").click().run()
+    _assert_clean(at)
+    assert any("Paste the job posting first" in w.value for w in at.warning)
+
+
+def test_jobspy_sites_hidden_unless_enabled(ui_env):
+    at = _run()
+    _assert_clean(at)
+    assert "linkedin" not in at.multiselect(key="scrape_sources").options
+    assert not [t for t in at.toggle if t.key == "jobspy_auto"]
+
+
+def test_jobspy_auto_refresh_adds_jobs_once(ui_env, monkeypatch, tmp_path):
+    import types
+
+    from db import repository as repo
+
+    calls = []
+
+    def scrape_jobs(**kw):
+        import pandas as pd
+
+        calls.append(kw)
+        return pd.DataFrame([{"title": "Java Developer", "company": "Acme", "location": "Bengaluru",
+                              "date_posted": None, "job_url": "https://www.linkedin.com/jobs/view/4012345678",
+                              "description": "Java and Spring Boot."}])
+
+    monkeypatch.setitem(sys.modules, "jobspy", types.SimpleNamespace(scrape_jobs=scrape_jobs))
+    monkeypatch.setenv("JOBSPY_SITES", "linkedin")
+    _seed()
+    at = _run()
+    _assert_clean(at)
+    assert at.toggle(key="jobspy_auto").value is True
+    assert "linkedin" in at.multiselect(key="scrape_sources").value
+    assert len(calls) == 1 and calls[0]["site_name"] == ["linkedin"]
+    assert any(j["source"] == "linkedin" for j in repo.list_jobs(limit=50))
+    at.run()  # any rerun within the hour must not search again
+    _assert_clean(at)
+    assert len(calls) == 1
+
+
+def test_default_keyword_is_the_language_the_resume_uses_most(ui_env):
+    from db import repository as repo
+
+    repo.save_resume({**RESUME, "skills": ["C++", "Java", "JavaScript", "Go"],
+                      "raw_text": "Skills: C++, Java, JavaScript, Go\nCars24: built Java services with "
+                                  "Spring Boot and Go workers. Java 17, JavaScript UI."}, "resume.txt")
+    at = _run()
+    _assert_clean(at)
+    assert at.text_input(key="scrape_keywords").value == "Java Developer"
+
+
+def test_frameworks_count_toward_their_language(ui_env):
+    from db import repository as repo
+
+    # Python is named more often, but Spring Boot and JUnit make Java the main language.
+    repo.save_resume({**RESUME, "skills": ["Python", "Java", "Go"],
+                      "raw_text": "Python, Python scripts, Python tooling. Java. Spring Boot services, "
+                                  "Spring Security, JUnit tests, JUnit 5. Let's go."}, "resume.txt")
+    at = _run()
+    _assert_clean(at)
+    assert at.text_input(key="scrape_keywords").value == "Java Developer"
+
+def test_score_glossary_is_one_click_away(ui_env):
+    _seed()
+    at = _run()
+    _assert_clean(at)
+    pops = [p for p in at.get("popover") if "score_help_matches" in p.proto.id]
+    assert pops and "Match score (0 to 100)" in pops[0].children[0].value
+
+
+def test_stored_scores_are_redone_once_after_the_formula_changes(ui_env, tmp_path):
+    from db import repository as repo
+    from matching.confidence_score import SCORING_VERSION
+
+    marker = tmp_path / "docs" / ".scoring_version"
+    marker.write_text("1")
+    rid = _seed(total=72.0)  # saved by the old formula
+    at = _run()
+    _assert_clean(at)
+    assert repo.list_matches(rid)[0]["confidence_score"] != 72.0
+    assert marker.read_text() == str(SCORING_VERSION)

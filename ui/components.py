@@ -14,10 +14,12 @@ import re
 import sys
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 from contextlib import contextmanager
 from typing import Any, Iterable, Iterator, Optional
 
 import streamlit as st
+from streamlit.errors import StreamlitAPIException
 
 log = logging.getLogger("jobhunt.ui")
 
@@ -33,16 +35,25 @@ SOURCES = {
     "greenhouse": "Greenhouse company boards (set GREENHOUSE_BOARDS in .env)",
     "lever": "Lever company boards (set LEVER_COMPANIES in .env)",
     "himalayas": "Himalayas (free public API, remote jobs open to your country)",
+    "linkedin": "LinkedIn (opt-in; LinkedIn forbids scraping, at most once an hour)",
+    "naukri": "Naukri (opt-in; Naukri forbids scraping, at most once an hour)",
 }
+JOBSPY_SOURCES = ["linkedin", "naukri"]
 DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow", "himalayas"]
+# Jobs the user pastes in themselves; never offered as something to scrape.
+ADDED_SOURCES = {"manual": "Added by you"}
 
 ETHICAL_NOTE = (
-    "**Only official, free job APIs.** RemoteOK, HN Who's Hiring, The Muse, Arbeitnow, Himalayas "
-    "and the Greenhouse and Lever company boards all publish their jobs for programs to read. Before "
-    "every request the app checks the site's `robots.txt` and skips any site that disallows it, "
+    "**Official, free job APIs by default.** RemoteOK, HN Who's Hiring, The Muse, Arbeitnow, Himalayas "
+    "and the Greenhouse and Lever company boards publish their jobs for programs to read. For these, the "
+    "app checks the site's `robots.txt` before every request and skips the site if it disallows it, "
     "waits 3-5 s between requests, caps each session at 20-50 jobs and stores results so the same "
-    "job is never fetched twice. Sites that block automated access (Naukri, LinkedIn, Indeed) are "
-    "not used."
+    "job is never fetched twice.\n\n"
+    "**LinkedIn and Naukri are an exception you opt into.** Their `robots.txt` and terms forbid "
+    "automated access, so they are off unless you turn them on in .env. When on, they are "
+    "searched without the robots check, with no login or proxies, at most once an hour by default. "
+    "Indeed is never used. You can also paste a job "
+    "under **Add a job yourself**."
 )
 
 LLM_HELP = (
@@ -54,35 +65,82 @@ LLM_HELP = (
 
 CSS = r"""
 <style>
-/* Colors come from .streamlit/config.toml; this sheet only styles the app's own markup
-   (cards, chips, score, empty states). No animation, no web fonts: the app stays offline. */
+/* One palette and one type family for the whole app. Streamlit's own widgets take them from
+   .streamlit/config.toml; these tokens repeat the same values for the app's markup (cards, chips,
+   score, empty states). Geist is bundled in ui/static/fonts, so the app stays offline.
+   Palette: ink on warm paper, indigo for action, green/amber/red only for match quality. */
 :root {
-  --jh-ink:#0f172a; --jh-ink-2:#334155; --jh-muted:#5b6678; --jh-line:#e2e8f0; --jh-line-2:#cbd5e1;
-  --jh-surface:#ffffff; --jh-wash:#f1f5f9;
-  --jh-accent:#0f766e; --jh-accent-ink:#115e59; --jh-accent-wash:#e6f2f0;
-  --jh-ok:#166534; --jh-ok-wash:#e8f4ec; --jh-warn:#9a4a07; --jh-warn-wash:#fbf0e1;
-  --jh-bad:#b91c1c; --jh-bad-wash:#fbeaea;
-  --jh-r:6px;
+  --jh-ink:#17171c; --jh-ink-2:#3d3d47; --jh-muted:#64646f; --jh-line:#e4e1d8; --jh-line-2:#cfcbbf;
+  --jh-paper:#f7f6f2; --jh-surface:#ffffff; --jh-wash:#efede7;
+  --jh-accent:#4f46e5; --jh-accent-ink:#4338ca; --jh-accent-wash:#eeedfb; --jh-accent-line:#d4d1f7;
+  --jh-ok:#15803d; --jh-ok-wash:#e9f5ec; --jh-ok-line:#c3e1cb; --jh-warn:#a34d08; --jh-warn-wash:#fbf1e3;
+  --jh-warn-line:#ecd3b2; --jh-bad:#b42318; --jh-bad-wash:#fcecea; --jh-bad-line:#f1c9c4;
+  --jh-r-sm:5px; --jh-r:8px; --jh-r-lg:12px;
+  --jh-shadow:0 1px 2px rgba(23,23,28,.04), 0 1px 1px rgba(23,23,28,.03);
+  --jh-shadow-hi:0 6px 20px -8px rgba(23,23,28,.14), 0 2px 4px rgba(23,23,28,.04);
+  --jh-sans:Geist, ui-sans-serif, system-ui, sans-serif; --jh-mono:"Geist Mono", ui-monospace, monospace;
 }
-[data-testid="stMainBlockContainer"], .block-container {max-width:1080px; padding-top:2.2rem; padding-bottom:4rem;}
-h1 {font-size:1.9rem !important; font-weight:700 !important; letter-spacing:-.02em; padding-bottom:.1rem !important;}
-h3 {font-size:1.3rem !important; font-weight:650 !important; letter-spacing:-.01em;}
-h4 {font-size:1.02rem !important; font-weight:650 !important; padding-top:1rem !important;}
+[data-testid="stApp"] {background:var(--jh-paper);}
+[data-testid="stHeader"] {background:transparent;}
+[data-testid="stMainBlockContainer"], .block-container {max-width:1120px; padding-top:2.4rem; padding-bottom:4rem;}
+h1 {font-size:2.1rem !important; font-weight:700 !important; letter-spacing:-.035em; padding-bottom:.1rem !important;}
+h1::before {content:""; display:inline-block; width:.62em; height:.62em; margin-right:.38em; border-radius:4px;
+  background:var(--jh-accent); vertical-align:.02em;}
+h2, h3 {letter-spacing:-.02em;}
+h3 {font-size:1.3rem !important; font-weight:650 !important;}
+h4 {font-size:1.02rem !important; font-weight:650 !important; padding-top:1rem !important; letter-spacing:-.01em;}
 *:focus-visible {outline:2px solid var(--jh-accent) !important; outline-offset:2px;}
+[data-testid="stPageLink"] p {color:var(--jh-muted); font-size:.86rem;}
+.jh-legal {max-width:68ch; line-height:1.65;}
 [data-testid="stWidgetLabel"] p {font-weight:600; color:var(--jh-ink-2); font-size:.88rem;}
+/* Streamlit fades captions to 60%; use the muted ink at full strength so they stay AA readable */
+[data-testid="stCaptionContainer"] {color:var(--jh-muted); opacity:1 !important;}
+
+/* tabs: a quiet segmented bar instead of underlined text */
+[data-testid="stTabs"] [role="tablist"] {gap:4px; padding:4px; background:var(--jh-wash); border-radius:var(--jh-r-lg);
+  width:fit-content; max-width:100%; overflow-x:auto; margin-bottom:6px;}
+[data-testid="stTabs"] [role="tablist"]::before, [data-testid="stTabs"] [role="tablist"]::after,
+[data-testid="stTabs"] [role="tablist"] > :not([role="tab"]) {display:none !important;}
+[data-testid="stTab"] {height:auto !important; padding:7px 16px !important; border-radius:var(--jh-r); white-space:nowrap;
+  border:0 !important;
+  color:var(--jh-muted); transition:background .16s ease-out, color .16s ease-out, box-shadow .16s ease-out;}
+[data-testid="stTab"] p {font-weight:600; font-size:.92rem;}
+[data-testid="stTab"] .react-aria-SelectionIndicator {display:none !important;}
+/* chosen options in a multiselect: accent-tinted, not solid blocks of color */
+[data-testid="stMultiSelectTagsContainer"] [data-tag] {background:var(--jh-accent-wash) !important;
+  color:var(--jh-accent-ink) !important; box-shadow:inset 0 0 0 1px var(--jh-accent-line); border-radius:var(--jh-r-sm) !important;}
+[data-testid="stMultiSelectTagsContainer"] [data-tag] * {color:var(--jh-accent-ink) !important;}
+[data-testid="stTab"]:hover {color:var(--jh-ink);}
+[data-testid="stTab"][aria-selected="true"] {background:var(--jh-surface); color:var(--jh-ink);
+  box-shadow:0 1px 3px rgba(23,23,28,.08), 0 0 0 1px var(--jh-line);}
+
+/* bordered containers that hold a panel or a job card read as raised white sheets */
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] :is(.jh-card, .jh-panel-title)) {
+  background:var(--jh-surface); box-shadow:var(--jh-shadow); transition:box-shadow .16s ease-out, border-color .16s ease-out;}
+[data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .jh-card):hover {
+  box-shadow:var(--jh-shadow-hi); border-color:var(--jh-line-2) !important;}
+[data-testid="stExpander"] details {background:var(--jh-surface); border-color:var(--jh-line) !important;
+  border-radius:var(--jh-r-lg) !important;}
+[data-testid="stExpander"] summary p {font-weight:600;}
+.stButton > button, .stDownloadButton > button, [data-testid="stFormSubmitButton"] > button {
+  font-weight:600; transition:transform .12s ease, box-shadow .15s ease;}
+.stButton > button:hover, .stDownloadButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover {
+  box-shadow:var(--jh-shadow-hi);}
+.stButton > button:active, [data-testid="stFormSubmitButton"] > button:active {transform:translateY(1px);}
+code {font-family:var(--jh-mono);}
+@media (prefers-reduced-motion:reduce) {* {transition:none !important;}}
 [data-testid="stForm"] {border:0; padding:0;}
 [data-testid="stSidebar"] code {overflow-wrap:anywhere; white-space:normal;}
 
-.jh-panel-title {font-size:.76rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
-  color:var(--jh-muted); margin:0 0 2px 0;}
+.jh-panel-title {font-size:.98rem; font-weight:650; letter-spacing:-.01em; color:var(--jh-ink); margin:0 0 4px 0;}
 .jh-muted {color:var(--jh-muted); font-size:.86rem;}
 
 /* chips: a tick or a cross carries the meaning, color only reinforces it */
 .jh-chips, .jh-tags {display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 12px 0;}
-.jh-chip, .jh-tag {font-size:.8rem; font-weight:550; line-height:1.5; padding:1px 8px; border-radius:var(--jh-r);
+.jh-chip, .jh-tag {font-size:.8rem; font-weight:550; line-height:1.5; padding:1px 9px; border-radius:var(--jh-r-sm);
   background:var(--jh-wash); color:var(--jh-ink-2); border:1px solid var(--jh-line);}
-.jh-chip.ok, .jh-tag.ok {background:var(--jh-ok-wash); color:var(--jh-ok); border-color:#c5dfcd;}
-.jh-chip.miss, .jh-tag.miss {background:var(--jh-bad-wash); color:var(--jh-bad); border-color:#efc9c9;}
+.jh-chip.ok, .jh-tag.ok {background:var(--jh-ok-wash); color:var(--jh-ok); border-color:var(--jh-ok-line);}
+.jh-chip.miss, .jh-tag.miss {background:var(--jh-bad-wash); color:var(--jh-bad); border-color:var(--jh-bad-line);}
 .jh-chip.ok::before, .jh-tag.ok::before {content:"\2713\00a0";}
 .jh-chip.miss::before, .jh-tag.miss::before {content:"\2715\00a0";}
 
@@ -90,15 +148,16 @@ h4 {font-size:1.02rem !important; font-weight:650 !important; padding-top:1rem !
 .jh-card {font-size:.94rem; color:var(--jh-ink-2);}
 .jh-card-head {display:flex; gap:14px; align-items:flex-start;}
 .jh-card-main {min-width:0; flex:1;}
-.jh-title {font-size:1.08rem; font-weight:650; color:var(--jh-ink); line-height:1.3; overflow-wrap:anywhere;}
+.jh-title {font-size:1.1rem; font-weight:650; letter-spacing:-.015em; color:var(--jh-ink); line-height:1.3; overflow-wrap:anywhere;}
 .jh-company {color:var(--jh-ink-2); font-weight:550; margin-top:1px; overflow-wrap:anywhere;}
-.jh-avatar {flex:none; width:40px; height:40px; border-radius:var(--jh-r); display:flex; align-items:center;
+.jh-avatar {flex:none; width:42px; height:42px; border-radius:var(--jh-r-lg); display:flex; align-items:center;
   justify-content:center; font-weight:700; font-size:1rem; border:1px solid var(--jh-line);}
 .jh-score {flex:none; width:104px; text-align:right;}
-.jh-score b {display:block; font-size:1.5rem; font-weight:700; line-height:1; font-variant-numeric:tabular-nums;
+.jh-score b {display:block; font-family:var(--jh-mono); font-size:1.55rem; font-weight:600; letter-spacing:-.04em;
+  line-height:1; font-variant-numeric:tabular-nums;
   color:var(--jh-muted);}
 .jh-score small {display:block; font-size:.76rem; font-weight:600; color:var(--jh-muted); margin:4px 0 5px 0;}
-.jh-score i {display:block; height:4px; background:var(--jh-wash); overflow:hidden;}
+.jh-score i {display:block; height:4px; background:var(--jh-wash); border-radius:2px; overflow:hidden;}
 .jh-score i > u {display:block; height:100%; background:var(--jh-line-2);}
 .jh-score.hi b, .jh-score.hi small {color:var(--jh-ok);} .jh-score.hi i > u {background:var(--jh-ok);}
 .jh-score.mid b, .jh-score.mid small {color:var(--jh-warn);} .jh-score.mid i > u {background:var(--jh-warn);}
@@ -109,16 +168,16 @@ h4 {font-size:1.02rem !important; font-weight:650 !important; padding-top:1rem !
 .jh-snippet {color:var(--jh-muted); margin:4px 0 10px 0; max-width:78ch; display:-webkit-box;
   -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
 .jh-near {display:flex; gap:8px; align-items:center; margin:2px 0 10px 0; padding:6px 10px;
-  border-left:3px solid var(--jh-ok); background:var(--jh-ok-wash); color:#14532d; font-size:.87rem; font-weight:550;}
+  border-left:3px solid var(--jh-ok); background:var(--jh-ok-wash); color:#14532d; border-radius:0 var(--jh-r) var(--jh-r) 0; font-size:.87rem; font-weight:550;}
 .jh-near svg {flex:none; width:15px; height:15px;}
 .jh-foot {display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
   color:var(--jh-muted); font-size:.83rem;}
 .jh-foot a {color:var(--jh-accent-ink); font-weight:600; text-decoration:underline; text-underline-offset:3px;}
-.jh-badge {font-size:.74rem; font-weight:650; padding:1px 8px; border-radius:var(--jh-r); background:var(--jh-wash);
+.jh-badge {font-size:.74rem; font-weight:650; padding:1px 9px; border-radius:var(--jh-r-sm); background:var(--jh-wash);
   color:var(--jh-ink-2); border:1px solid var(--jh-line); text-transform:capitalize;}
-.jh-badge.saved {background:var(--jh-warn-wash); color:var(--jh-warn); border-color:#ecd5b4;}
-.jh-badge.applied {background:var(--jh-ok-wash); color:var(--jh-ok); border-color:#c5dfcd;}
-.jh-badge.rejected {background:var(--jh-bad-wash); color:var(--jh-bad); border-color:#efc9c9;}
+.jh-badge.saved {background:var(--jh-warn-wash); color:var(--jh-warn); border-color:var(--jh-warn-line);}
+.jh-badge.applied {background:var(--jh-ok-wash); color:var(--jh-ok); border-color:var(--jh-ok-line);}
+.jh-badge.rejected {background:var(--jh-bad-wash); color:var(--jh-bad); border-color:var(--jh-bad-line);}
 @media (max-width:560px) {
   .jh-avatar {display:none;}
   .jh-score {width:84px;}
@@ -128,10 +187,10 @@ h4 {font-size:1.02rem !important; font-weight:650 !important; padding-top:1rem !
 .jh-bars {display:grid; grid-template-columns:max-content 1fr max-content; gap:9px 12px; align-items:center;
   margin:2px 0 14px 0; font-size:.88rem;}
 .jh-bars label {color:var(--jh-ink-2); font-weight:550;}
-.jh-bars .track {height:6px; background:var(--jh-wash); overflow:hidden;}
-.jh-bars .fill {height:100%; background:var(--jh-accent);}
+.jh-bars .track {height:6px; background:var(--jh-wash); border-radius:3px; overflow:hidden;}
+.jh-bars .fill {height:100%; border-radius:3px; background:var(--jh-accent);}
 .jh-bars .fill.low {background:var(--jh-line-2);} .jh-bars .fill.mid {background:var(--jh-warn);}
-.jh-bars b {font-variant-numeric:tabular-nums; font-weight:650; color:var(--jh-ink); min-width:2ch; text-align:right;}
+.jh-bars b {font-family:var(--jh-mono); font-variant-numeric:tabular-nums; font-weight:650; color:var(--jh-ink); min-width:2ch; text-align:right;}
 .jh-bars small {grid-column:1 / -1; color:var(--jh-muted); margin-top:-4px;}
 .jh-counts {grid-template-columns:minmax(0,max-content) minmax(40px,1fr) max-content; font-size:.84rem;}
 .jh-counts small {margin-top:2px;}
@@ -149,18 +208,20 @@ h4 {font-size:1.02rem !important; font-weight:650 !important; padding-top:1rem !
 .jh-strip {display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:6px 0 14px 0; color:var(--jh-muted);
   font-size:.87rem;}
 .jh-strip b {color:var(--jh-ink); font-variant-numeric:tabular-nums;}
-.jh-strip .pill {padding:1px 8px; border-radius:var(--jh-r); background:var(--jh-accent-wash);
+.jh-strip .pill {padding:1px 9px; border-radius:var(--jh-r-sm); background:var(--jh-accent-wash);
   color:var(--jh-accent-ink); font-weight:600;}
 .jh-empty {text-align:center; padding:32px 20px 34px; border:1px dashed var(--jh-line-2);
-  border-radius:var(--jh-r); background:var(--jh-surface); margin:10px 0 18px;}
+  border-radius:var(--jh-r-lg); background:var(--jh-surface); margin:10px 0 18px;}
 .jh-empty svg {width:28px; height:28px; color:var(--jh-muted); margin-bottom:8px;}
 .jh-empty h5 {margin:0 0 4px; padding:0; font-size:1.02rem; font-weight:650; color:var(--jh-ink);}
 .jh-empty p {margin:0 auto; max-width:48ch; color:var(--jh-muted); font-size:.92rem;}
-.jh-stat {display:flex; gap:10px 32px; flex-wrap:wrap; margin:4px 0 6px;}
-.jh-stat div b {display:block; font-size:1.45rem; font-weight:700; color:var(--jh-ink);
+.jh-stat {display:grid; grid-template-columns:repeat(auto-fit, minmax(132px, 1fr)); gap:10px; margin:10px 0 8px;}
+.jh-stat div {background:var(--jh-surface); border:1px solid var(--jh-line); border-radius:var(--jh-r-lg);
+  padding:10px 14px 11px; box-shadow:var(--jh-shadow); min-width:0;}
+.jh-stat div b {display:block; font-family:var(--jh-mono); font-size:1.4rem; font-weight:600; letter-spacing:-.04em; color:var(--jh-ink);
   font-variant-numeric:tabular-nums; line-height:1.15; overflow-wrap:anywhere;}
-.jh-stat div span {color:var(--jh-muted); font-size:.82rem;}
-.jh-next {margin:6px 0 14px; padding:8px 12px; border-left:3px solid var(--jh-accent); background:var(--jh-accent-wash);
+.jh-stat div span {display:block; color:var(--jh-muted); font-size:.8rem; line-height:1.3; margin-top:4px;}
+.jh-next {margin:6px 0 18px; padding:10px 14px; border-left:3px solid var(--jh-accent); border-radius:0 var(--jh-r) var(--jh-r) 0; background:var(--jh-accent-wash);
   color:var(--jh-ink); font-size:.93rem;}
 .jh-dot {display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; background:var(--jh-line-2);}
 .jh-dot.on {background:var(--jh-ok);}
@@ -170,6 +231,29 @@ h4 {font-size:1.02rem !important; font-weight:650 !important; padding-top:1rem !
 
 def inject_css() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
+
+
+FAVICON = str(Path(__file__).resolve().parent / "static" / "favicon.png")
+LEGAL_PAGES = (("pages/privacy.py", "Privacy policy"), ("pages/terms.py", "Terms and conditions"))
+
+
+def page_setup(title: str) -> None:
+    """Same tab title pattern, favicon and styles on every page."""
+    st.set_page_config(page_title=title, page_icon=FAVICON, layout="wide")
+    inject_css()
+
+
+def legal_footer() -> None:
+    """Links to the privacy policy and terms, at the foot of every page."""
+    st.divider()
+    cols = st.columns([1, 1, 3])
+    for col, (path, label) in zip(cols, LEGAL_PAGES):
+        with col:
+            try:
+                st.page_link(path, label=label)
+            except StreamlitAPIException:  # pages added while the server ran are unknown until a restart
+                slug = path.rsplit("/", 1)[-1].removesuffix(".py")
+                st.markdown(f"[{label}](/{slug})")
 
 
 # --------------------------------------------------------------------------- errors
@@ -263,7 +347,7 @@ def experience_line(item: Any) -> str:
         if not dates and (item.get("start") or item.get("end")):
             dates = f"{item.get('start') or ''} - {item.get('end') or ''}"
         head = " @ ".join(p for p in (str(title), str(org)) if p)
-        line = f"**{head}**" if head else ""
+        line = f"**{html.escape(head)}**" if head else ""
         if dates:
             line += f" <span class='jh-muted'>({html.escape(str(dates))})</span>"
         return line or html.escape(json.dumps(item)[:200])
@@ -314,8 +398,56 @@ def snippet(text: Any, limit: int = 220) -> str:
     return s[:limit].rsplit(" ", 1)[0] + "..."
 
 
+# Match-score bands; the same numbers as STRONG_AT / POSSIBLE_AT in matching/confidence_score.py
+# (kept here so this module stays light; tests/test_matching.py checks they agree).
+STRONG_AT, POSSIBLE_AT = 40.0, 25.0
+
+
 def score_class(value: float) -> str:
+    """Band of a match score: "hi" strong, "mid" possible, "low" weak."""
+    return "hi" if value >= STRONG_AT else "mid" if value >= POSSIBLE_AT else "low"
+
+
+def part_class(value: float) -> str:
+    """Color of one part of the breakdown (each part is its own 0-100 scale)."""
     return "hi" if value >= 50 else "mid" if value >= 35 else "low"
+
+
+SCORE_GLOSSARY = f"""
+**Match score (0 to 100)** says how well your resume fits the job, lowered when the job is hard
+to reach for you right now. It is worked out in two halves:
+
+- **Fit** = 60% *Skills and keywords* + 40% *Meaning match*. This is the ceiling: a job can never
+  score higher than its fit.
+- **Reach** = 75% *Experience fit* + 25% *Freshness*. A job you can fully reach keeps all of its
+  fit; one you cannot reach yet keeps 40% of it.
+- Then it is lowered if the job is not open to your country.
+
+**Strong match** is {STRONG_AT:.0f} and above, **possible** {POSSIBLE_AT:.0f} to {STRONG_AT - 1:.0f},
+**weak** below {POSSIBLE_AT:.0f}. A job can only be strong when its skills score is 35 or more,
+and only possible when it is 20 or more, so experience and freshness alone never make a job look good.
+
+**The parts (each 0 to 100):**
+
+- **Skills and keywords**: half the share of the posting's skills that are on your resume, half how
+  many of its important words your resume uses. Capped at 30 when the job title names a skill you
+  do not have (for example "Databricks Developer" without Databricks).
+- **Meaning match**: how close the posting and your resume are in meaning, not just in words.
+  Uses a small language model on your machine, or word statistics when the model is not available.
+- **Experience fit**: 100 when you have the years the job asks for, 20 points less for each year
+  short. 70 when the posting does not say.
+- **Freshness**: 100 for jobs posted in the last day, down to 30 after two weeks.
+- **Location**: whether the job is in, or open to, your country (`CANDIDATE_COUNTRY`).
+
+**Skills shown on a card**: a tick means the skill is on your resume, a cross means it is not.
+Skills come from a fixed list, so very short names (C, Go, R) can sometimes be picked up by mistake.
+"""
+
+
+def score_help(key: str) -> None:
+    """A small "What do the scores mean?" popover with ``SCORE_GLOSSARY``."""
+    with st.popover("What the scores mean", icon=":material/info:", key=key):
+        st.markdown(SCORE_GLOSSARY)
 
 
 SCORE_LABELS = {"hi": "Strong match", "mid": "Possible match", "low": "Weak match"}
@@ -330,7 +462,10 @@ def score_label(value: Any) -> str:
 
 
 def source_name(key: Any) -> str:
-    return SOURCES.get(str(key or ""), str(key or "")).split(" (")[0]
+    key = str(key or "")
+    if key in ADDED_SOURCES:
+        return ADDED_SOURCES[key]
+    return SOURCES.get(key, key).split(" (")[0]
 
 
 def status_name(status: Any) -> str:
@@ -447,7 +582,7 @@ def score_bars_html(parts: Iterable[tuple], note: str = "") -> str:
         try:
             v = max(0.0, min(100.0, float(value)))
             rows.append(f'<label>{html.escape(str(label))}</label><div class="track">'
-                        f'<div class="fill {score_class(v) if score_class(v) != "hi" else ""}" '
+                        f'<div class="fill {part_class(v) if part_class(v) != "hi" else ""}" '
                         f'style="width:{v:.0f}%"></div></div><b>{v:.0f}</b>')
         except (TypeError, ValueError):
             rows.append(f'<label>{html.escape(str(label))}</label><div class="track"></div><b>-</b>')

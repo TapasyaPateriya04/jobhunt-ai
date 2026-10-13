@@ -63,7 +63,11 @@ code MUST degrade gracefully when they are missing (tests run without them).
   `parse_resume_bytes(filename, data) -> dict` (.tex/.txt/.md; .pdf optional) returning
   `{"raw_text","skills": list[str],"experience": list[dict],"education": str,"summary": str}`.
 - `parser/jd_analyzer.py`: `analyze_jd(text) -> {"skills": list[str], "experience_years": int|None, "keywords": list[str]}`.
-- `generator/llm.py`: `call_llm(prompt) -> str` (Ollama then Gemini fallback; raises `LLMUnavailable` with a helpful message).
+- `generator/llm.py`: `stream_llm(prompt, model=None) -> Iterator[str]` (Ollama streaming with `think: false`, then
+  Gemini if Ollama fails before writing anything) and `call_llm(prompt, model=None) -> str` (the joined stream); both
+  raise `LLMUnavailable` whose message says what failed and how to fix it. The UI shows that message as is.
+- `generator/cover_letter.py`: `stream_cover_letter(...)` + `clean_cover_letter(text)`; `generator/resume_optimizer.py`:
+  `stream_resume_edits(...)` (streamed versions used by the Documents tab).
 - `generator/cover_letter.py`: `generate_cover_letter(resume: dict, job: dict) -> str`.
 - `generator/resume_optimizer.py`: `suggest_resume_edits(resume: dict, job: dict) -> str`.
 - `generator/jd_insights.py`: `split_requirements(jd_text) -> {"must_have", "nice_to_have", "source"}` (rules, instant),
@@ -75,7 +79,8 @@ code MUST degrade gracefully when they are missing (tests run without them).
 - `matching/semantic_matcher.py`: `semantic_score(resume_text, jd_text) -> float`; lazy-loads `all-MiniLM-L6-v2`;
   falls back to TF-IDF char n-gram / LSA similarity when sentence-transformers unavailable.
 - `matching/confidence_score.py`: `calculate_confidence_score(resume: dict, job: dict) -> dict` with keys
-  `total, ats, experience, semantic, freshness` using weights 0.35/0.30/0.25/0.10 (plus `ats_raw`, `skill_coverage`,
+  `total, ats, experience, semantic, freshness` computed as fit x reach (`combine_parts`; see the module docstring), plus `band`
+  (strong / possible / weak), `missing_title_skills`, `ats_raw`, `skill_coverage`,
   `candidate_years`, `required_years`); `score_jobs(resume, jobs) -> list[dict]`; `required_years_for(job)`,
   `seniority_years(job)`. `ats` = half calibrated TF-IDF, half `ats_scorer.skill_coverage`.
 - `matching/location.py`: `location_fit(job, country, cities=()) -> {"status", "score", "reason"}` with status
