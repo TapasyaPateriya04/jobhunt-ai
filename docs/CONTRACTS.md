@@ -79,7 +79,8 @@ code MUST degrade gracefully when they are missing (tests run without them).
 - `matching/semantic_matcher.py`: `semantic_score(resume_text, jd_text) -> float`; lazy-loads `all-MiniLM-L6-v2`;
   falls back to TF-IDF char n-gram / LSA similarity when sentence-transformers unavailable.
 - `matching/confidence_score.py`: `calculate_confidence_score(resume: dict, job: dict) -> dict` with keys
-  `total, ats, experience, semantic, freshness` using weights 0.35/0.30/0.25/0.10 (plus `ats_raw`, `skill_coverage`,
+  `total, ats, experience, semantic, freshness` computed as fit x reach (`combine_parts`; see the module docstring), plus `band`
+  (strong / possible / weak), `missing_title_skills`, `ats_raw`, `skill_coverage`,
   `candidate_years`, `required_years`); `score_jobs(resume, jobs) -> list[dict]`; `required_years_for(job)`,
   `seniority_years(job)`. `ats` = half calibrated TF-IDF, half `ats_scorer.skill_coverage`.
 - `matching/location.py`: `location_fit(job, country, cities=()) -> {"status", "score", "reason"}` with status

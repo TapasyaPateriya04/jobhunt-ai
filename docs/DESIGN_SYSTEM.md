@@ -75,7 +75,7 @@ values into new code):
   turns white with a soft shadow; job cards lift on hover.
 - **Job card** (`c.job_card_html`): title, company, location, skill chips, age and source,
   "Open posting" link. Each card sits in `st.container(border=True)`.
-- **Score**: a number plus a band word (strong 50+, possible 35 to 49, weak), never color
+- **Score**: a number plus a band word (strong 40+, possible 25 to 39, weak), never color
   alone. Breakdown (ATS, experience, semantic, freshness, location) in an expander.
 - **Chips and badges**: small square-ish corners (`--jh-r-sm`, 5 px), never pill-shaped; a tick (✓) or cross (✕) carries the meaning, color
   only reinforces it.

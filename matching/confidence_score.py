@@ -1,10 +1,20 @@
-"""Confidence score (SPEC §5.3): weighted blend of ATS, experience, semantic, freshness.
+"""Match score: how well the resume fits the job, scaled down by how reachable the job is.
 
-total = 0.35 * ats + 0.30 * experience + 0.25 * semantic + 0.10 * freshness   (all 0-100)
+    fit   = 0.6 * ats + 0.4 * semantic                  (does the work match?)
+    reach = 0.75 * experience + 0.25 * freshness        (can you get it now?)
+    total = fit * (0.4 + 0.6 * reach / 100)              (all 0-100)
 
-The SPEC's 0.35/0.25/0.20/0.20 put a week-old perfect match below a fresh poor one.
-Measured on 52 hand-labeled real jobs (scripts/evaluate_matching.py), halving freshness
-and moving that weight to experience and semantic raised precision@5. ``ats`` is half
+An earlier weighted sum (0.35 ats, 0.30 experience, 0.25 semantic, 0.10 freshness) let
+experience and freshness, 40% of the score, lift a job whose skills barely matched into
+"strong match" (a Cisco job matching only "AI" scored 51). Multiplying makes fit the ceiling:
+a perfect reach only keeps the fit, it cannot add to it. On top of that:
+
+- the skills score is capped at ``TITLE_SKILL_CAP`` when the job title names a skill the
+  resume lacks (a "Databricks Developer" without Databricks is not a near miss);
+- the total is capped below "strong" when the skills score is under ``STRONG_MIN_SKILLS`` and
+  below "possible" under ``POSSIBLE_MIN_SKILLS``, so the label can never outrun the skills.
+
+Bands (``band``): strong ``STRONG_AT``+, possible ``POSSIBLE_AT``+, weak below. ``ats`` is half
 TF-IDF keyword overlap and half skill coverage (share of the posting's skills the resume has).
 
 When a home country is set (``CANDIDATE_COUNTRY``), the total is then multiplied by a
@@ -22,7 +32,14 @@ from matching.location import location_factor, location_fit
 from matching.semantic_matcher import semantic_scores
 from parser.skills_vocab import find_skills
 
-WEIGHTS = {"ats": 0.35, "experience": 0.30, "semantic": 0.25, "freshness": 0.10}
+# Share of each part inside its group (fit or reach); see the module docstring.
+WEIGHTS = {"ats": 0.6, "semantic": 0.4, "experience": 0.75, "freshness": 0.25}
+# Bump when the formula changes: the app then re-scores stored jobs once (ui/app.py).
+SCORING_VERSION = 2
+REACH_FLOOR = 0.4  # a job you cannot reach yet keeps 40% of its fit
+STRONG_AT, POSSIBLE_AT = 40.0, 25.0
+STRONG_MIN_SKILLS, POSSIBLE_MIN_SKILLS = 35.0, 20.0
+TITLE_SKILL_CAP = 30.0
 MAX_YEARS = 50
 # Experience score when the posting gives no years and no seniority cue: neutral, so an
 # unknown requirement neither beats a stated match nor sinks the job.
@@ -338,15 +355,41 @@ def experience_score(resume_exp: Any, required_years: Optional[float]) -> float:
 
 # ----------------------------------------------------------------------------- scoring
 
+def band(total: Any) -> str:
+    """"strong", "possible" or "weak" for a match score (the caps live in the score itself)."""
+    try:
+        value = float(total)
+    except (TypeError, ValueError):
+        return "none"
+    return "strong" if value >= STRONG_AT else "possible" if value >= POSSIBLE_AT else "weak"
+
+
+def combine_parts(ats: float, sem: float, exp: float, fresh: float) -> float:
+    """The match score before the location factor, from the four parts (0-100 each)."""
+    fit = WEIGHTS["ats"] * ats + WEIGHTS["semantic"] * sem
+    reach = WEIGHTS["experience"] * exp + WEIGHTS["freshness"] * fresh
+    total = fit * (REACH_FLOOR + (1 - REACH_FLOOR) * reach / 100.0)
+    if ats < POSSIBLE_MIN_SKILLS:
+        total = min(total, POSSIBLE_AT - 0.1)
+    elif ats < STRONG_MIN_SKILLS:
+        total = min(total, STRONG_AT - 0.1)
+    return max(0.0, min(100.0, total))
+
+
 def _combine(ats: float, ats_raw: float, exp: float, sem: float, fresh: float,
              candidate_years: float, required_years: Optional[int],
-             coverage: Optional[float] = None, location: Optional[dict] = None) -> dict:
-    base = (WEIGHTS["ats"] * ats + WEIGHTS["experience"] * exp
-            + WEIGHTS["semantic"] * sem + WEIGHTS["freshness"] * fresh)
+             coverage: Optional[float] = None, location: Optional[dict] = None,
+             missing_title_skills: Iterable[str] = ()) -> dict:
+    missing_title_skills = list(missing_title_skills)
+    if missing_title_skills:
+        ats = min(ats, TITLE_SKILL_CAP)
+    base = combine_parts(ats, sem, exp, fresh)
     location = location or {"status": "unknown", "score": 100.0, "reason": ""}
     total = base * location_factor(location["score"])
     return {
         "total": round(max(0.0, min(100.0, total)), 1),
+        "band": band(round(total, 1)),
+        "missing_title_skills": missing_title_skills,
         "base_total": round(max(0.0, min(100.0, base)), 1),
         "location_status": location["status"],
         "location_score": location["score"],
@@ -388,10 +431,13 @@ def _score_batch(resume: dict, jobs: List[dict], country: Optional[str] = None,
     for job, jtext, raw, sem in zip(jobs, jtexts, raws, sems):
         req = required_years_for(job)
         coverage = skill_coverage(have, jtext)
+        have_lower = {h.lower() for h in have}
+        title_missing = [s for s in find_skills(str((job or {}).get("title") or ""))
+                         if s.lower() not in have_lower]
         out.append(_combine(blended_ats(calibrate(raw), coverage), raw * 100.0,
                             experience_score(cand, req), sem,
                             freshness_score((job or {}).get("posted_date")), cand, req, coverage,
-                            location_fit(job, country, cities)))
+                            location_fit(job, country, cities), title_missing))
     return out
 
 
@@ -417,4 +463,5 @@ def score_jobs(resume: dict, jobs: Iterable[dict], country: Optional[str] = None
 __all__ = [
     "calculate_confidence_score", "score_jobs", "freshness_score", "experience_score",
     "estimate_candidate_years", "extract_required_years", "seniority_years", "required_years_for", "WEIGHTS",
+    "band", "combine_parts", "STRONG_AT", "POSSIBLE_AT",
 ]

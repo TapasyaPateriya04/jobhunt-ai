@@ -398,8 +398,56 @@ def snippet(text: Any, limit: int = 220) -> str:
     return s[:limit].rsplit(" ", 1)[0] + "..."
 
 
+# Match-score bands; the same numbers as STRONG_AT / POSSIBLE_AT in matching/confidence_score.py
+# (kept here so this module stays light; tests/test_matching.py checks they agree).
+STRONG_AT, POSSIBLE_AT = 40.0, 25.0
+
+
 def score_class(value: float) -> str:
+    """Band of a match score: "hi" strong, "mid" possible, "low" weak."""
+    return "hi" if value >= STRONG_AT else "mid" if value >= POSSIBLE_AT else "low"
+
+
+def part_class(value: float) -> str:
+    """Color of one part of the breakdown (each part is its own 0-100 scale)."""
     return "hi" if value >= 50 else "mid" if value >= 35 else "low"
+
+
+SCORE_GLOSSARY = f"""
+**Match score (0 to 100)** says how well your resume fits the job, lowered when the job is hard
+to reach for you right now. It is worked out in two halves:
+
+- **Fit** = 60% *Skills and keywords* + 40% *Meaning match*. This is the ceiling: a job can never
+  score higher than its fit.
+- **Reach** = 75% *Experience fit* + 25% *Freshness*. A job you can fully reach keeps all of its
+  fit; one you cannot reach yet keeps 40% of it.
+- Then it is lowered if the job is not open to your country.
+
+**Strong match** is {STRONG_AT:.0f} and above, **possible** {POSSIBLE_AT:.0f} to {STRONG_AT - 1:.0f},
+**weak** below {POSSIBLE_AT:.0f}. A job can only be strong when its skills score is 35 or more,
+and only possible when it is 20 or more, so experience and freshness alone never make a job look good.
+
+**The parts (each 0 to 100):**
+
+- **Skills and keywords**: half the share of the posting's skills that are on your resume, half how
+  many of its important words your resume uses. Capped at 30 when the job title names a skill you
+  do not have (for example "Databricks Developer" without Databricks).
+- **Meaning match**: how close the posting and your resume are in meaning, not just in words.
+  Uses a small language model on your machine, or word statistics when the model is not available.
+- **Experience fit**: 100 when you have the years the job asks for, 20 points less for each year
+  short. 70 when the posting does not say.
+- **Freshness**: 100 for jobs posted in the last day, down to 30 after two weeks.
+- **Location**: whether the job is in, or open to, your country (`CANDIDATE_COUNTRY`).
+
+**Skills shown on a card**: a tick means the skill is on your resume, a cross means it is not.
+Skills come from a fixed list, so very short names (C, Go, R) can sometimes be picked up by mistake.
+"""
+
+
+def score_help(key: str) -> None:
+    """A small "What do the scores mean?" popover with ``SCORE_GLOSSARY``."""
+    with st.popover("What the scores mean", icon=":material/info:", key=key):
+        st.markdown(SCORE_GLOSSARY)
 
 
 SCORE_LABELS = {"hi": "Strong match", "mid": "Possible match", "low": "Weak match"}
@@ -534,7 +582,7 @@ def score_bars_html(parts: Iterable[tuple], note: str = "") -> str:
         try:
             v = max(0.0, min(100.0, float(value)))
             rows.append(f'<label>{html.escape(str(label))}</label><div class="track">'
-                        f'<div class="fill {score_class(v) if score_class(v) != "hi" else ""}" '
+                        f'<div class="fill {part_class(v) if part_class(v) != "hi" else ""}" '
                         f'style="width:{v:.0f}%"></div></div><b>{v:.0f}</b>')
         except (TypeError, ValueError):
             rows.append(f'<label>{html.escape(str(label))}</label><div class="track"></div><b>-</b>')
