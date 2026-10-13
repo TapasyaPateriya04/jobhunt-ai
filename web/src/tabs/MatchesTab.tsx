@@ -225,7 +225,23 @@ export function MatchesTab() {
             <>
               <Charts shown={shown} />
               <div className="split">
-                <div className="joblist">
+                <div
+                  className="joblist"
+                  role="listbox"
+                  aria-label="Matched jobs"
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                    event.preventDefault();
+                    const visible = groups.slice(0, shownCount);
+                    const idx = visible.findIndex((g) => g.lead.id === selected?.id);
+                    const next = event.key === "ArrowDown" ? Math.min(idx + 1, visible.length - 1) : Math.max(idx - 1, 0);
+                    if (next !== idx && visible[next]) {
+                      setPicked(visible[next].lead.id);
+                      const el = (event.currentTarget as HTMLElement).querySelector(`[data-id="${visible[next].lead.id}"]`);
+                      if (el instanceof HTMLElement) el.focus();
+                    }
+                  }}
+                >
                   {groups.slice(0, shownCount).map((group) => (
                     <JobRow
                       key={group.lead.id}
@@ -516,7 +532,7 @@ function JobRow({ group, selected, onPick }: { group: Group; selected: boolean; 
   const match = group.lead;
   const many = group.places.length > 1;
   return (
-    <button type="button" className="jobrow" aria-current={selected} onClick={onPick}>
+    <button type="button" className="jobrow" role="option" aria-selected={selected} data-id={group.lead.id} onClick={onPick}>
       <span className="head">
         <span>
           <span className="title">{match.title}</span>
