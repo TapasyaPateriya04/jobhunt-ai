@@ -16,6 +16,7 @@ import {
   Panel,
   Posting,
   Score,
+  Section,
   Skeleton,
   Working,
 } from "../components/ui";
@@ -83,6 +84,7 @@ export function MatchesTab() {
   const [filters, setFilters] = useState<Filters | null>(null);
   const [shownCount, setShownCount] = useState(PAGE);
   const [sheet, setSheet] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const wide = useMedia(WIDE);
 
   const countries = useLoad<{ countries: string[]; configured: string }>(() => get("/countries"), [], true, "countries");
@@ -143,79 +145,106 @@ export function MatchesTab() {
 
   return (
     <>
-      <Panel title="Where you can work">
-        <div className="row" style={{ alignItems: "flex-end" }}>
-          <div style={{ flex: "1 1 240px" }}>
-            <Field
-              label="Your country"
-              help="Jobs restricted to other countries, time zones or languages are ranked down."
-            >
-              <select value={country ?? ""} onChange={(event) => setCountry(event.target.value)}>
-                <option value="">Ignore location</option>
-                {(countries.data?.countries ?? []).map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <button type="button" className="primary" onClick={() => void score()} disabled={scoring}>
-            Score stored jobs
-          </button>
-        </div>
-        {scoring && (
-          <div style={{ marginTop: 12 }}>
-            <Working text="Comparing your resume with every stored job. The first run loads the model, which can take a minute." />
-          </div>
-        )}
-        {note && (
-          <div style={{ marginTop: 12 }}>
-            <Notice tone={tone}>{note}</Notice>
-          </div>
-        )}
-      </Panel>
-
-      <ScoreGuide />
-
-      {matches.data && matches.data.rescored > 0 && (
-        <Notice tone="info">
-          The scoring was improved, so your {matches.data.rescored} stored jobs were scored again.
-        </Notice>
-      )}
-
       {matches.loading && !matches.data ? (
-        <Skeleton rows={4} />
+        <Skeleton rows={5} list />
       ) : matches.error ? (
         <Notice tone="bad">{matches.error}</Notice>
-      ) : !all.length ? (
-        <Empty
-          icon="search"
-          title="No matches yet"
-          hint="Collect jobs on the Find jobs tab, then press Score stored jobs above."
-        />
       ) : (
         <>
-          {filters && catalog && (
-            <FilterPanel
-              filters={filters}
-              setFilters={(next) => {
-                setFilters(next);
-                setShownCount(PAGE); // a new filter starts the list again
-              }}
-              catalog={catalog}
-              data={matches.data!}
-              hasCountry={Boolean(country)}
-              onReset={() => {
-                setFilters(defaults(years, Boolean(country)));
-                setShownCount(PAGE);
-              }}
-            />
+          <section className="card">
+            {filters && catalog && (
+              <FilterPanel
+                filters={filters}
+                setFilters={(next) => {
+                  setFilters(next);
+                  setShownCount(PAGE); // a new filter starts the list again
+                }}
+                catalog={catalog}
+                data={matches.data!}
+                hasCountry={Boolean(country)}
+                country={country ?? ""}
+                countries={countries.data?.countries ?? []}
+                setCountry={setCountry}
+                wide={wide}
+              />
+            )}
+            {!filters && (
+              <div className="row">
+                <Field label="Your country">
+                  <select value={country ?? ""} onChange={(event) => setCountry(event.target.value)}>
+                    <option value="">Ignore location</option>
+                    {(countries.data?.countries ?? []).map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            )}
+            <div className="resultline" style={{ marginTop: 16 }}>
+              {all.length > 0 && <SummaryStrip all={all} shown={shown} filters={filters} country={country ?? ""} />}
+              <span className="spacer" />
+              {filters && (
+                <button
+                  type="button"
+                  className="linklike"
+                  onClick={() => {
+                    setFilters(defaults(years, Boolean(country)));
+                    setShownCount(PAGE);
+                  }}
+                >
+                  Reset filters
+                </button>
+              )}
+              {catalog?.score_guide?.length ? (
+                <button
+                  type="button"
+                  className="linklike"
+                  aria-expanded={guideOpen}
+                  onClick={() => setGuideOpen(!guideOpen)}
+                >
+                  {guideOpen ? "Hide what the scores mean" : "What the scores mean"}
+                </button>
+              ) : null}
+              <button type="button" onClick={() => void score()} disabled={scoring}>
+                {scoring ? "Scoring..." : "Score stored jobs"}
+              </button>
+            </div>
+            {scoring && (
+              <div style={{ marginTop: 12 }}>
+                <Working text="Comparing your resume with every stored job. The first run loads the model, which can take a minute." />
+              </div>
+            )}
+            {note && (
+              <div style={{ marginTop: 12 }}>
+                <Notice tone={tone}>{note}</Notice>
+              </div>
+            )}
+          </section>
+
+          {guideOpen && catalog?.score_guide?.length ? (
+            <Panel title="What the scores mean">
+              <p className="hint" style={{ marginBottom: 16, maxWidth: "var(--measure)" }}>
+                {catalog.score_note}
+              </p>
+              <Guide sections={catalog.score_guide} />
+            </Panel>
+          ) : null}
+
+          {matches.data && matches.data.rescored > 0 && (
+            <Notice tone="info">
+              The scoring was improved, so your {matches.data.rescored} stored jobs were scored again.
+            </Notice>
           )}
 
-          <SummaryStrip all={all} shown={shown} filters={filters} country={country ?? ""} />
-
-          {!shown.length ? (
+          {!all.length ? (
+            <Empty
+              icon="search"
+              title="No matches yet"
+              hint="Collect jobs on the Find jobs tab, then press Score stored jobs above."
+            />
+          ) : !shown.length ? (
             <Empty
               icon="filter"
               title="No jobs pass these filters"
@@ -223,7 +252,6 @@ export function MatchesTab() {
             />
           ) : (
             <>
-              <Charts shown={shown} />
               <div className="split">
                 <div
                   className="joblist"
@@ -261,7 +289,11 @@ export function MatchesTab() {
                 </div>
                 {wide && (
                   <div className="detail">
-                    {selectedGroup && <Detail group={selectedGroup} onChanged={changed} />}
+                    {selectedGroup && (
+                      <div className="enter" key={selectedGroup.lead.id}>
+                        <Detail group={selectedGroup} onChanged={changed} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -270,10 +302,11 @@ export function MatchesTab() {
                   <Detail group={selectedGroup} onChanged={changed} />
                 </Sheet>
               )}
+              <Charts shown={shown} />
             </>
           )}
 
-          <SkillsToLearn />
+          {all.length > 0 && <SkillsToLearn />}
         </>
       )}
     </>
@@ -324,30 +357,27 @@ function FilterPanel({
   catalog,
   data,
   hasCountry,
-  onReset,
+  country,
+  countries,
+  setCountry,
+  wide,
 }: {
   filters: Filters;
   setFilters: (f: Filters) => void;
   catalog: Catalog;
   data: MatchList;
   hasCountry: boolean;
-  onReset: () => void;
+  country: string;
+  countries: string[];
+  setCountry: (value: string) => void;
+  wide: boolean;
 }) {
   const set = <K extends keyof Filters,>(key: K, value: Filters[K]) => setFilters({ ...filters, [key]: value });
   return (
-    <Panel
-      title="Filters"
-      action={
-        <button type="button" className="quiet small" onClick={onReset}>
-          Reset filters
-        </button>
-      }
-    >
-      <div className="stack">
-        <Field
-          label="Search"
-          help="Every word you type must appear in the job's title, company, location or required skills."
-        >
+    <div>
+      {/* One row of 40 px controls under labels of one line, so every box lines up. */}
+      <div className="filterbar">
+        <Field label="Search" help="Every word must appear in the title, company, location or skills.">
           <input
             type="text"
             value={filters.query}
@@ -355,40 +385,79 @@ function FilterPanel({
             onChange={(event) => set("query", event.target.value)}
           />
         </Field>
-        <div className="grid2">
-          <Field
-            label={`Minimum match score: ${filters.minScore}`}
-            help={bandHelp(catalog)}
+        <Field label="Your country" help="Jobs closed to it are ranked down.">
+          <select
+            value={country}
+            onChange={(event) => setCountry(event.target.value)}
           >
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={filters.minScore}
-              onChange={(event) => set("minScore", Number(event.target.value))}
-            />
-          </Field>
-          <Field
-            label={
-              filters.maxYears >= ANY_YEARS
-                ? "Asks for at most: any number of years"
-                : `Asks for at most ${filters.maxYears} ${plural(filters.maxYears, "year")}`
-            }
-            help={`Your resume shows about ${data.candidate_years} years. ${ANY_YEARS} shows every level.`}
-          >
-            <input
-              type="range"
-              min={0}
-              max={ANY_YEARS}
-              step={1}
-              value={filters.maxYears}
-              onChange={(event) => set("maxYears", Number(event.target.value))}
-            />
-          </Field>
-        </div>
-        <div className="grid2">
-          <label className="check">
+            <option value="">Ignore location</option>
+            {countries.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Status">
+          <select value={filters.status} onChange={(event) => set("status", event.target.value)}>
+            <option value={ALL}>All but hidden</option>
+            {catalog.statuses.map((status) => (
+              <option key={status.key} value={status.key}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Sort by">
+          <select value={filters.sort} onChange={(event) => set("sort", event.target.value)}>
+            {catalog.sorts.map((sort) => (
+              <option key={sort} value={sort}>
+                {sort}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      <More open={wide}>
+        <Field label={`Minimum match score: ${filters.minScore}`} help={bandHelp(catalog)}>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={filters.minScore}
+            onChange={(event) => set("minScore", Number(event.target.value))}
+          />
+        </Field>
+        <Field
+          label={
+            filters.maxYears >= ANY_YEARS
+              ? "Asks for at most: any number of years"
+              : `Asks for at most ${filters.maxYears} ${plural(filters.maxYears, "year")}`
+          }
+          help={`Your resume shows about ${data.candidate_years} years. ${ANY_YEARS} shows every level.`}
+        >
+          <input
+            type="range"
+            min={0}
+            max={ANY_YEARS}
+            step={1}
+            value={filters.maxYears}
+            onChange={(event) => set("maxYears", Number(event.target.value))}
+          />
+        </Field>
+        <Field label="Source">
+          <select value={filters.source} onChange={(event) => set("source", event.target.value)}>
+            <option value={ALL}>{ALL}</option>
+            {data.sources.map((key) => (
+              <option key={key} value={key}>
+                {data.source_names[key] ?? key}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <div>
+          <label className="check" style={{ paddingTop: 0, minHeight: 0 }}>
             <input
               type="checkbox"
               checked={filters.onlyTakeable && hasCountry}
@@ -414,39 +483,20 @@ function FilterPanel({
             <span>Include jobs that state no years</span>
           </label>
         </div>
-        <div className="grid3">
-          <Field label="Source">
-            <select value={filters.source} onChange={(event) => set("source", event.target.value)}>
-              <option value={ALL}>{ALL}</option>
-              {data.sources.map((key) => (
-                <option key={key} value={key}>
-                  {data.source_names[key] ?? key}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Status" help="All leaves out hidden jobs.">
-            <select value={filters.status} onChange={(event) => set("status", event.target.value)}>
-              <option value={ALL}>{ALL}</option>
-              {catalog.statuses.map((status) => (
-                <option key={status.key} value={status.key}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Sort by">
-            <select value={filters.sort} onChange={(event) => set("sort", event.target.value)}>
-              {catalog.sorts.map((sort) => (
-                <option key={sort} value={sort}>
-                  {sort}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-      </div>
-    </Panel>
+      </More>
+    </div>
+  );
+}
+
+/** The sliders and checkboxes: always shown on a wide screen; on a narrow one they fold
+ *  under "More filters", so the list is not pushed a screen down. */
+function More({ open, children }: { open: boolean; children: React.ReactNode }) {
+  if (open) return <div className="filtermore">{children}</div>;
+  return (
+    <details className="morefilters">
+      <summary>More filters</summary>
+      <div className="filtermore">{children}</div>
+    </details>
   );
 }
 
@@ -464,9 +514,9 @@ function SummaryStrip({
   const hidden = all.filter((m) => m.status === "hidden").length;
   const near = shown.filter((m) => m.near_miss).length;
   return (
-    <div className="row tight" style={{ fontSize: "0.85rem" }}>
+    <span className="row tight">
       <span>
-        <b style={{ fontFamily: "var(--mono)" }}>{shown.length}</b> of {all.length} jobs
+        <b style={{ fontFamily: "var(--mono)", color: "var(--ink)" }}>{shown.length}</b> of {all.length} jobs
       </span>
       {country && filters?.onlyTakeable && <span className="badge accent">{country} or remote</span>}
       {filters && filters.maxYears < ANY_YEARS && (
@@ -479,7 +529,7 @@ function SummaryStrip({
         </span>
       )}
       {hidden > 0 && <span className="muted">{hidden} hidden (Status: Hidden shows them)</span>}
-    </div>
+    </span>
   );
 }
 
@@ -536,45 +586,44 @@ function JobRow({ group, selected, onPick }: { group: Group; selected: boolean; 
       <span className="head">
         <span>
           <span className="title">{match.title}</span>
-          <br />
+          <span className="sub">
+            {match.company}
+            {many ? (
+              <span className="places" title={group.places.join("; ")}>
+                {" "}· {countLabel(group.places.length, "location")}
+              </span>
+            ) : match.location ? (
+              ` · ${match.location}`
+            ) : null}
+          </span>
           <Meta
             parts={[
-              match.company,
-              many ? null : match.location,
               timeAgo(match.posted_date),
               match.source_name,
               match.years !== null ? `asks ${countLabel(match.years, "year")}` : null,
+              match.status !== "new" ? statusLabel(match.status) : null,
             ]}
           />
-          {many && (
-            <>
-              <br />
-              <span className="meta places" title={group.places.join("; ")}>
-                {countLabel(group.places.length, "location")}
-              </span>
-            </>
-          )}
         </span>
         <Score value={match.score} band={match.band} label={match.band_label} />
       </span>
-      <span className="row tight">
-        {match.status !== "new" && <span className="badge accent">{statusLabel(match.status)}</span>}
-        {match.location_ok === false && (
-          <span className="badge bad">
-            <Icon name="alert" size={12} />
-            {match.location_text || "Not open to you"}
-          </span>
-        )}
-        {match.near_miss && (
-          <span className="badge ok">
-            {countLabel(match.gap.missing.length, "skill")} short of a full match
-          </span>
-        )}
-      </span>
-      {match.gap.matched.length + match.gap.missing.length > 0 && (
+      {(match.location_ok === false || match.near_miss) && (
         <span className="row tight">
+          {match.location_ok === false && (
+            <span className="badge bad">
+              <Icon name="alert" size={12} />
+              {match.location_text || "Not open to you"}
+            </span>
+          )}
+          {match.near_miss && (
+            <span className="badge ok">{countLabel(match.gap.missing.length, "skill")} short of a full match</span>
+          )}
+        </span>
+      )}
+      {match.gap.matched.length + match.gap.missing.length > 0 && (
+        <span className="chips">
           <Chips items={match.gap.matched.slice(0, 4)} kind="ok" empty={null} />
-          <Chips items={match.gap.missing.slice(0, 4)} kind="miss" empty={null} />
+          <Chips items={match.gap.missing.slice(0, 3)} kind="miss" empty={null} />
         </span>
       )}
     </button>
@@ -609,6 +658,13 @@ function Sheet({ onClose, children }: { onClose: () => void; children: React.Rea
       <div className="sheet-body">{children}</div>
     </div>
   );
+}
+
+/** Badge tone for a status: tracked ones in the applied blue, set-aside ones in grey. */
+function statusTone(status: string): string {
+  if (["saved", "applied", "interview", "offer"].includes(status)) return "applied";
+  if (["hidden", "rejected"].includes(status)) return "hidden";
+  return "";
 }
 
 function statusLabel(status: string): string {
@@ -682,162 +738,172 @@ function Detail({ group, onChanged }: { group: Group; onChanged: () => void }) {
     missing: skills.filter((s) => !have.has(s.toLowerCase())),
   });
 
+  const cap = match.location_ok === false ? "capped: not open to you" : null;
+
   return (
-    <div className="stack">
-      <Panel>
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div>
-            <h2 style={{ fontSize: "1.05rem" }}>{match.title}</h2>
-            <Meta parts={[match.company, match.location, timeAgo(match.posted_date), match.source_name]} />
+    <article className="card">
+      <div className="detail-head">
+        <div>
+          <h1>{match.title}</h1>
+          <Meta parts={[match.company, match.location, timeAgo(match.posted_date), match.source_name]} />
+          <div className="row tight" style={{ marginTop: 6 }}>
+            {match.location_text && (
+              <span className={`badge${match.location_ok === false ? " bad" : match.location_ok ? " ok" : ""}`}>
+                {match.location_text}
+              </span>
+            )}
+            {match.years !== null && <span className="badge">asks {countLabel(match.years, "year")}</span>}
+            {match.status !== "new" && <span className={`badge ${statusTone(match.status)}`}>{statusLabel(match.status)}</span>}
           </div>
-          <Score value={match.score} band={match.band} label={match.band_label} />
-        </div>
-        <div className="row tight" style={{ marginTop: 10 }}>
-          {match.location_text && (
-            <span className={`badge${match.location_ok === false ? " bad" : match.location_ok ? " ok" : ""}`}>
-              {match.location_text}
-            </span>
+          {group.places.length > 1 && (
+            <p className="hint" style={{ marginTop: 4 }}>
+              Posted for {countLabel(group.places.length, "location")}: {group.places.join("; ")}
+            </p>
           )}
-          {match.years !== null && <span className="badge">asks {countLabel(match.years, "year")}</span>}
-          {match.status !== "new" && <span className="badge accent">{statusLabel(match.status)}</span>}
         </div>
-        {group.places.length > 1 && (
-          <p className="hint" style={{ marginTop: 8 }}>
-            Posted for {countLabel(group.places.length, "location")}: {group.places.join("; ")}
-          </p>
-        )}
-        <hr className="divider" />
-        <div className="row tight">
-          <button
-            type="button"
-            className={match.status === "saved" ? "" : "primary"}
-            disabled={busy}
-            onClick={() => void setStatus(match.status === "saved" ? "new" : "saved")}
-          >
-            {match.status === "saved" ? "Unsave" : "Save"}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void setStatus(match.status === "hidden" ? "new" : "hidden")}
-          >
-            {match.status === "hidden" ? "Unhide" : "Hide"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              writeDocumentsFor(match.id);
-              setTab("documents");
-            }}
-          >
-            Write documents
-          </button>
-          <OpenPosting url={match.url} />
-        </div>
-        <div className="row tight" style={{ marginTop: 8 }}>
-          <Field label="Status">
-            <select
-              value={match.status}
-              disabled={busy}
-              onChange={(event) => void setStatus(event.target.value)}
-            >
-              {(catalog?.statuses ?? []).map((status) => (
-                <option key={status.key} value={status.key}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-        {note && (
-          <div style={{ marginTop: 10 }}>
-            <Notice tone={tone}>{note}</Notice>
-          </div>
-        )}
-      </Panel>
+        <Score value={match.score} band={match.band} label={match.band_label} large cap={cap} />
+      </div>
 
-      <Panel title="How this score was worked out">
-        <Bars parts={parts} note={catalog?.score_note} />
-        <details style={{ marginTop: 10 }}>
-          <summary className="hint" style={{ cursor: "pointer" }}>
-            What the scores mean
-          </summary>
-          <div style={{ marginTop: 10 }}>
-            <Guide sections={catalog?.score_guide ?? []} />
-          </div>
-        </details>
-      </Panel>
+      <div className="actions" style={{ marginTop: 24 }}>
+        <button
+          type="button"
+          className="primary"
+          onClick={() => {
+            writeDocumentsFor(match.id);
+            setTab("documents");
+          }}
+        >
+          Write cover letter
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void setStatus(match.status === "saved" ? "new" : "saved")}
+        >
+          {match.status === "saved" ? "Unsave" : "Save"}
+        </button>
+        {match.status !== "applied" && (
+          <button type="button" disabled={busy} onClick={() => void setStatus("applied")}>
+            Mark applied
+          </button>
+        )}
+        <button
+          type="button"
+          className="quiet"
+          disabled={busy}
+          onClick={() => void setStatus(match.status === "hidden" ? "new" : "hidden")}
+        >
+          {match.status === "hidden" ? "Unhide" : "Hide"}
+        </button>
+        <OpenPosting url={match.url} link />
+      </div>
+      <label className="status-line" style={{ marginTop: 12 }}>
+        <span className="hint">Status</span>
+        <select value={match.status} disabled={busy} onChange={(event) => void setStatus(event.target.value)}>
+          {(catalog?.statuses ?? []).map((status) => (
+            <option key={status.key} value={status.key}>
+              {status.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {note && (
+        <div style={{ marginTop: 12 }}>
+          <Notice tone={tone}>{note}</Notice>
+        </div>
+      )}
 
-      {requirements && (requirements.must_have.length > 0 || requirements.nice_to_have.length > 0) && (
-        <Panel title="What the posting asks for">
-          <div className="grid2">
-            {(
-              [
-                ["Must have", requirements.must_have],
-                ["Nice to have", requirements.nice_to_have],
-              ] as [string, string[]][]
-            ).map(([title, skills]) => {
-              const group = split(skills);
-              return (
-                <div key={title}>
-                  <h4 style={{ marginBottom: 6 }}>{title}</h4>
-                  <div className="stack">
-                    <Chips items={group.known} kind="ok" empty={null} />
-                    <Chips items={group.missing} kind="miss" empty={null} />
-                    {!skills.length && <p className="hint">None found.</p>}
+      <div className="section section-grid">
+        <Section label="Score breakdown">
+          <Bars parts={parts} note={catalog?.score_note} />
+          <details style={{ marginTop: 12 }}>
+            <summary className="hint" style={{ cursor: "pointer" }}>
+              What the scores mean
+            </summary>
+            <div style={{ marginTop: 12 }}>
+              <Guide sections={catalog?.score_guide ?? []} />
+            </div>
+          </details>
+        </Section>
+
+        <Section label="Skills">
+          <div className="stack" style={{ gap: 16 }}>
+            {requirements && (requirements.must_have.length > 0 || requirements.nice_to_have.length > 0) ? (
+              <>
+                {(
+                  [
+                    ["Must have", requirements.must_have],
+                    ["Nice to have", requirements.nice_to_have],
+                  ] as [string, string[]][]
+                ).map(([title, skills]) => {
+                  const group = split(skills);
+                  return (
+                    <div key={title}>
+                      <h4 style={{ marginBottom: 8 }}>{title}</h4>
+                      {skills.length ? (
+                        <div className="chips">
+                          <Chips items={group.known} kind="ok" empty={null} />
+                          <Chips items={group.missing} kind="miss" empty={null} />
+                        </div>
+                      ) : (
+                        <p className="hint">None found.</p>
+                      )}
+                    </div>
+                  );
+                })}
+                <p className="hint">
+                  A tick means the skill is on your resume; "missing" means it is not. Split by{" "}
+                  {requirements.source === "llm" ? "the language model" : "keyword rules"}.
+                </p>
+                {requirements.source !== "llm" && (
+                  <div>
+                    <button type="button" className="small" onClick={() => void recheck()} disabled={busy}>
+                      Re-check with the language model
+                    </button>
                   </div>
+                )}
+              </>
+            ) : detail.loading ? (
+              <Skeleton rows={1} />
+            ) : (
+              <p className="hint">The posting names no skills the app recognises.</p>
+            )}
+            {detail.data && (detail.data.keywords.matched.length > 0 || detail.data.keywords.missing.length > 0) && (
+              <div>
+                <h4 style={{ marginBottom: 8 }}>Keywords</h4>
+                <div className="chips">
+                  <Chips items={detail.data.keywords.matched} kind="ok" empty={null} />
+                  <Chips items={detail.data.keywords.missing} kind="miss" empty={null} />
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
-          <p className="hint" style={{ marginTop: 10 }}>
-            A tick means the skill is on your resume, a cross means it is missing. Split by{" "}
-            {requirements.source === "llm" ? "the language model" : "keyword rules"}.
-          </p>
-          {requirements.source !== "llm" && (
-            <button type="button" className="small" onClick={() => void recheck()} disabled={busy}>
-              Re-check with the language model
-            </button>
-          )}
-        </Panel>
-      )}
-
-      {detail.data && (detail.data.keywords.matched.length > 0 || detail.data.keywords.missing.length > 0) && (
-        <Panel title="Keywords">
-          <div className="grid2">
-            <div>
-              <h4 style={{ marginBottom: 6 }}>On your resume</h4>
-              <Chips items={detail.data.keywords.matched} kind="ok" />
-            </div>
-            <div>
-              <h4 style={{ marginBottom: 6 }}>Missing</h4>
-              <Chips items={detail.data.keywords.missing} kind="miss" />
-            </div>
-          </div>
-        </Panel>
-      )}
+        </Section>
+      </div>
 
       {match.has_description && (
-        <Panel
-          title="The posting"
-          action={
-            <button type="button" className="quiet small" onClick={() => setShowPosting(!showPosting)}>
-              {showPosting ? "Hide" : "Show"}
-            </button>
-          }
-        >
-          {showPosting ? (
-            detail.data ? (
-              <Posting text={detail.data.description} />
+        <div className="section">
+          <Section
+            label="Description"
+            action={
+              <button type="button" className="quiet small" onClick={() => setShowPosting(!showPosting)}>
+                {showPosting ? "Show less" : "Show the full posting"}
+              </button>
+            }
+          >
+            {showPosting ? (
+              detail.data ? (
+                <Posting text={detail.data.description} />
+              ) : (
+                <Skeleton rows={1} />
+              )
             ) : (
-              <Skeleton rows={1} />
-            )
-          ) : (
-            <p className="hint">{match.snippet}</p>
-          )}
-        </Panel>
+              <p style={{ maxWidth: "var(--measure)" }}>{match.snippet}</p>
+            )}
+          </Section>
+        </div>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -888,22 +954,4 @@ function bandHelp(catalog: Catalog | null): string {
   if (bands.length < 2) return "Higher is a better match.";
   const [strong, possible] = bands;
   return `${strong.min} and above is a ${strong.label.toLowerCase()}, ${possible.min} to ${strong.min - 1} a ${possible.label.toLowerCase()}.`;
-}
-
-function ScoreGuide() {
-  const { catalog } = useApp();
-  const [open, setOpen] = useState(false);
-  if (!catalog?.score_guide?.length) return null;
-  return (
-    <Panel
-      title="What the scores mean"
-      action={
-        <button type="button" className="quiet small" onClick={() => setOpen(!open)} aria-expanded={open}>
-          {open ? "Hide" : "Show"}
-        </button>
-      }
-    >
-      {open ? <Guide sections={catalog.score_guide} /> : <p className="hint">{catalog.score_note}</p>}
-    </Panel>
-  );
 }

@@ -130,8 +130,8 @@ export function Chips({
       {items.map((item) => (
         <span className={`chip${kind ? ` ${kind}` : ""}`} key={item}>
           {kind === "ok" && <Icon name="check" size={12} />}
-          {kind === "miss" && <Icon name="cross" size={12} />}
           {item}
+          {kind === "miss" && <span className="tag">missing</span>}
           {onRemove && (
             <button type="button" aria-label={`Remove ${item}`} onClick={() => onRemove(item)}>
               <Icon name="cross" size={12} />
@@ -163,12 +163,39 @@ export function Empty({ icon, title, hint }: { icon: string; title: string; hint
   );
 }
 
-export function Score({ value, band, label }: { value: number; band: string; label: string }) {
+/** The score: the number, a chip with the band in words, and an optional cap note. */
+export function Score({
+  value,
+  band,
+  label,
+  large,
+  cap,
+}: {
+  value: number;
+  band: string;
+  label: string;
+  large?: boolean;
+  cap?: string | null;
+}) {
   return (
-    <span className={`score ${band}`}>
+    <span className={`score ${band}${large ? " large" : ""}`}>
       <span className="num">{Math.round(value)}</span>
       <span className="band">{label}</span>
+      {cap && <span className="cap">{cap}</span>}
     </span>
+  );
+}
+
+/** A block of the job pane under a mono label (SCORE BREAKDOWN, SKILLS, DESCRIPTION). */
+export function Section({ label, action, children }: { label: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section>
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+        <h3 className="label-mono" style={{ margin: 0 }}>{label}</h3>
+        {action}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -247,20 +274,43 @@ export function Field({
 
 /** Placeholder rows, shown only when loading takes longer than 200 ms so a quick answer
  *  does not flash grey boxes first. */
-export function Skeleton({ rows = 3 }: { rows?: number }) {
+export function Skeleton({ rows = 3, list }: { rows?: number; list?: boolean }) {
   const [late, setLate] = useState(false);
   useEffect(() => {
     const timer = window.setTimeout(() => setLate(true), 200);
     return () => window.clearTimeout(timer);
   }, []);
   if (!late) return null;
+  if (list) {
+    // Shaped like the job list: rows in one frame, a title, a meta line and a score tile.
+    return (
+      <div className="joblist" aria-hidden="true">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div className="jobrow" key={i}>
+            <div className="head">
+              <div style={{ display: "grid", gap: 8 }}>
+                <div className="skeleton" style={{ height: 14, width: `${68 - (i % 3) * 12}%` }} />
+                <div className="skeleton" style={{ height: 10, width: "46%" }} />
+              </div>
+              <div className="skeleton" style={{ height: 30, width: 46 }} />
+            </div>
+            <div className="row tight">
+              {[54, 72, 48].map((w) => (
+                <div className="skeleton" key={w} style={{ height: 20, width: w }} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="stack" aria-hidden="true">
       {Array.from({ length: rows }).map((_, i) => (
-        <div className="card" key={i} style={{ display: "grid", gap: 8 }}>
-          <div className="skeleton" style={{ height: 15, width: `${60 - i * 7}%` }} />
-          <div className="skeleton" style={{ height: 11, width: "42%" }} />
-          <div className="skeleton" style={{ height: 11, width: "72%" }} />
+        <div className="card" key={i} style={{ display: "grid", gap: 10 }}>
+          <div className="skeleton" style={{ height: 14, width: `${60 - i * 7}%` }} />
+          <div className="skeleton" style={{ height: 10, width: "42%" }} />
+          <div className="skeleton" style={{ height: 10, width: "72%" }} />
         </div>
       ))}
     </div>
@@ -294,10 +344,15 @@ export function Meta({ parts }: { parts: (string | null | undefined)[] }) {
   );
 }
 
-export function OpenPosting({ url, small }: { url: string; small?: boolean }) {
+export function OpenPosting({ url, small, link }: { url: string; small?: boolean; link?: boolean }) {
   if (!/^https?:\/\//.test(url)) return null;
   return (
-    <a className={`btn${small ? " small" : ""}`} href={url} target="_blank" rel="noreferrer noopener">
+    <a
+      className={link ? "link" : `btn${small ? " small" : ""}`}
+      href={url}
+      target="_blank"
+      rel="noreferrer noopener"
+    >
       Open posting
       <Icon name="external" size={13} />
     </a>

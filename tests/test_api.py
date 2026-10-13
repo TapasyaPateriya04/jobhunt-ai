@@ -186,8 +186,8 @@ def test_front_end_has_no_em_dashes_or_emoji():
 def test_theme_has_no_pill_shapes_or_gradients():
     css = (WEB_SRC / "theme.css").read_text(encoding="utf-8")
     assert "999px" not in css and "border-radius:50px" not in css
-    # The only gradient is the grey shimmer of a loading placeholder.
-    assert css.count("gradient(") == 1 and "--accent" not in css.split("skeleton")[1].split("}")[0]
+    # No gradients at all: loading placeholders are flat fills that fade, not a shimmer.
+    assert "gradient(" not in css
 
 
 def test_the_front_end_has_a_favicon_and_legal_pages():

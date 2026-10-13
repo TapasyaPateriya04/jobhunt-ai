@@ -37,16 +37,17 @@ export default function App() {
   );
 }
 
-function TopBar({ children }: { children?: React.ReactNode }) {
+/** Logo on the left, the tabs in the centre (when given), and `end` on the right. */
+function TopBar({ nav, end }: { nav?: React.ReactNode; end?: React.ReactNode }) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
-        <Link to="/" className="wordmark" style={{ borderBottom: 0, color: "inherit" }}>
+        <Link to="/" className="wordmark" style={{ borderBottom: 0 }}>
           <span className="mark" />
           JobHunt AI
         </Link>
-        <span className="spacer" />
-        {children}
+        {nav ?? <span />}
+        <span style={{ minWidth: 0 }}>{end}</span>
       </div>
     </header>
   );
@@ -55,9 +56,10 @@ function TopBar({ children }: { children?: React.ReactNode }) {
 function Footer() {
   return (
     <footer className="footer">
-      <Link to="/privacy">Privacy policy</Link>
-      <Link to="/terms">Terms and conditions</Link>
-      <span>Runs on this machine. No account, no tracking.</span>
+      <span>Data stays on this laptop, in SQLite. No account, no tracking.</span>
+      <span className="spacer" />
+      <Link to="/privacy">Privacy</Link>
+      <Link to="/terms">Terms</Link>
     </footer>
   );
 }
@@ -65,9 +67,7 @@ function Footer() {
 function LegalPage({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <TopBar>
-        <Link to="/">Back to JobHunt AI</Link>
-      </TopBar>
+      <TopBar end={<Link to="/">Back to JobHunt AI</Link>} />
       <main className="shell">
         <div className="prose" style={{ marginTop: 24 }}>
           {children}
@@ -79,36 +79,70 @@ function LegalPage({ children }: { children: React.ReactNode }) {
 }
 
 function Dashboard() {
-  const { tab, setTab, overview, error } = useApp();
-  const tabs = useRef<HTMLDivElement>(null);
+  const { tab, setTab, overview, error, resume } = useApp();
   const picked = useRef(false);
 
   // A long list leaves the page far down, so a new tab starts at its own top. The scroll
   // runs after the new tab has rendered, or it would aim at the old content's height.
+  // The tabs live in the sticky top bar, so the top of the page is the top of the tab.
   useEffect(() => {
     if (!picked.current) return;
     const frame = requestAnimationFrame(() => {
-      const top = (tabs.current?.getBoundingClientRect().top ?? 0) + window.scrollY - 64;
-      if (window.scrollY > top) window.scrollTo({ top, behavior: "smooth" });
+      if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: "smooth" });
     });
     return () => cancelAnimationFrame(frame);
   }, [tab]);
   const health = useLoad<{ database_problem: string }>(() => get("/health"), []);
   const counts = overview?.counts ?? {};
 
+  const nav = (
+    <div className="tabs nav" role="tablist" aria-label="What you want to do">
+      {TABS.map((entry) => (
+        <button
+          type="button"
+          role="tab"
+          key={entry.key}
+          aria-selected={tab === entry.key}
+          // On a phone the bar scrolls sideways, so the tab in use is brought into
+          // view. Only the bar moves: scrollIntoView would scroll the page as well.
+          ref={(node) => {
+            if (tab !== entry.key || !node) return;
+            const bar = node.parentElement;
+            if (bar) bar.scrollLeft = node.offsetLeft - (bar.clientWidth - node.clientWidth) / 2;
+          }}
+          onClick={() => {
+            picked.current = true;
+            setTab(entry.key);
+          }}
+        >
+          {entry.label}
+          {badge(entry.key, counts) !== null && <span className="tab-count">{badge(entry.key, counts)}</span>}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <>
-      <TopBar>
-        <span className="note">Everything stays on this machine</span>
-      </TopBar>
+      <TopBar
+        nav={nav}
+        end={
+          <span className="file" title={resume ? `Resume in use: ${resume.name}` : undefined}>
+            {resume ? resume.name : "No resume yet"}
+          </span>
+        }
+      />
       <main className="shell">
-        <div className="layout" style={{ marginTop: 24 }}>
-          <Sidebar />
+        {/* Matches uses the full width: the list and the job side by side. The sidebar's
+            model picker stays on every other tab. */}
+        <div className={`layout${tab === "matches" ? " wide" : ""}`}>
+          {tab !== "matches" && <Sidebar />}
           <div className="main">
             {health.data?.database_problem && <Notice tone="bad">{health.data.database_problem}</Notice>}
             {error && <Notice tone="warn">{error}</Notice>}
 
-            {overview && (
+            {/* Matches opens straight on its filters, list and job, as in the layout spec. */}
+            {overview && tab !== "matches" && (
               <>
                 {overview.has_resume && overview.stats.some((s) => s.value > 0) && (
                   <div className="stats">
@@ -137,32 +171,10 @@ function Dashboard() {
               </>
             )}
 
-            <div className="tabs" role="tablist" aria-label="What you want to do" ref={tabs}>
-              {TABS.map((entry) => (
-                <button
-                  type="button"
-                  role="tab"
-                  key={entry.key}
-                  aria-selected={tab === entry.key}
-                  // On a phone the bar scrolls sideways, so the tab in use is brought into
-                  // view. Only the bar moves: scrollIntoView would scroll the page as well.
-                  ref={(node) => {
-                    if (tab !== entry.key || !node) return;
-                    const bar = node.parentElement;
-                    if (bar) bar.scrollLeft = node.offsetLeft - (bar.clientWidth - node.clientWidth) / 2;
-                  }}
-                  onClick={() => {
-                    picked.current = true;
-                    setTab(entry.key);
-                  }}
-                >
-                  {entry.label}
-                  {badge(entry.key, counts) !== null && <span className="tab-count">{badge(entry.key, counts)}</span>}
-                </button>
-              ))}
+            {/* Keyed by tab, so each new tab fades in once instead of popping in. */}
+            <div className="tabpanel enter" role="tabpanel" key={tab}>
+              <Tab which={tab} />
             </div>
-
-            <Tab which={tab} />
           </div>
         </div>
       </main>
