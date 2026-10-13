@@ -669,7 +669,7 @@ function Detail({ group, onChanged }: { group: Group; onChanged: () => void }) {
       <Panel>
         <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <h3>{match.title}</h3>
+            <h2 style={{ fontSize: "1.05rem" }}>{match.title}</h2>
             <Meta parts={[match.company, match.location, timeAgo(match.posted_date), match.source_name]} />
           </div>
           <Score value={match.score} band={match.band} label={match.band_label} />
