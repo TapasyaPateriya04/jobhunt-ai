@@ -20,6 +20,9 @@ sqlalchemy==2.0.30
 
 # UI
 streamlit==1.64.0
+# Local API behind the React front end (binds to 127.0.0.1 only)
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
 pandas==2.2.2
 pillow==12.3.0               # comes with streamlit; pinned past known CVEs (pip-audit)
 

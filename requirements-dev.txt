@@ -3,7 +3,9 @@
 # CI audits both files with pip-audit; bump a pin here and in requirements.txt together.
 alembic==1.13.2
 beautifulsoup4==4.12.3
+fastapi==0.143.0
 fpdf2==2.7.9
+httpx==0.28.1                # TestClient for the local API in api/
 loguru==0.7.2
 numpy==1.26.4
 pandas==2.2.2

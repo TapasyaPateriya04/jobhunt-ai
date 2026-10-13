@@ -2,9 +2,9 @@
 
 > Keep this current. A change to `.streamlit/config.toml` `[theme]`, the `--jh-*` tokens or the
 > CSS in `ui/components.py`, or a new UI pattern, updates this file in the same commit.
-> Last reviewed: 2026-10-12. Palette chosen by Arpit on 2026-10-12: ink on warm paper with one
-> indigo accent, Geist type. A job list with a detail pane and score breakdown bars is coming
-> soon; describe it here when it lands.
+> Last reviewed: 2026-10-13. Palette chosen by Arpit on 2026-10-12: ink on warm paper with one
+> indigo accent, Geist type. The React app (`web/`) carries the same palette and type in
+> `web/src/theme.css`; its job list with a detail pane is described under "The React app".
 
 ## Feel
 
@@ -24,6 +24,9 @@ hover and color changes (cards lift, buttons gain a shadow, tabs shift), switche
 | Components | `ui/components.py` helpers | Job card, chips, score bar, empty state, panel title |
 | Page frame | `c.page_setup(title)`, `c.legal_footer()` | Tab title, favicon (`ui/static/favicon.png`), styles, footer links on every page |
 | Legal pages | `ui/pages/privacy.py`, `ui/pages/terms.py` | Privacy policy, terms and conditions (hidden from the sidebar; `client.showSidebarNavigation = false`) |
+| React tokens | `web/src/theme.css` `:root` | The same palette and type for the React app, plus its own components |
+
+The Streamlit theme, the `--jh-*` tokens and `web/src/theme.css` must carry the same values.
 
 The theme and the `--jh-*` tokens must carry the same values; change both together.
 
@@ -113,3 +116,42 @@ values into new code):
 - Text contrast meets WCAG AA (4.5:1). Status is never shown by color alone.
 - Check every screen at desktop width and at about 400 px.
 - UI work uses the `streamlit-ui-ux` skill.
+
+## The React app (`web/`)
+
+The same system, written as plain CSS in `web/src/theme.css`. Nothing is loaded from the
+internet: Geist and Geist Mono are copied into `web/public/fonts` (OFL) and the favicon is the
+same indigo square with a white tick.
+
+| Token | Use |
+| --- | --- |
+| `--ink`, `--ink-2`, `--muted` | Text: primary, secondary, captions |
+| `--line`, `--line-2` | Borders and dividers |
+| `--paper`, `--surface`, `--wash` | Page background, cards and inputs, subtle fills |
+| `--accent`, `--accent-ink`, `--accent-wash`, `--accent-line` | The one accent: primary buttons, links, focus ring, selected row |
+| `--ok`, `--warn`, `--bad` (+ `-wash`, `-line`) | Match bands and status |
+| `--r-sm` 5 px, `--r` 7 px, `--r-lg` 8 px | Chips and badges, controls, cards |
+| `--shadow`, `--shadow-hi` | Resting card shadow, hover shadow |
+| `--sans`, `--mono` | Geist, Geist Mono |
+
+Corners are 5 to 8 px here, tighter than Streamlit's 12 px cards, because the React screens are
+denser. Every number that is compared (scores, years, counts) is set in Geist Mono.
+
+Patterns, beyond the ones above:
+
+- **Page frame**: a sticky bar with the wordmark, the title and one line of purpose, then a
+  sidebar (resume in use, language model, storage) beside the tabbed main column. Below 1000 px
+  the sidebar moves under the tabs; below 768 px every grid is one column.
+- **Tabs**: the same segmented bar as Streamlit. On a phone the bar scrolls and the tab in use
+  is scrolled into view.
+- **Matches**: a list on the left and the job you picked on the right (`.split`), the detail
+  pane sticky on a wide screen. The selected row carries an indigo border, never colour alone.
+- **Score breakdown**: one bar per part with its value out of 100 and a line saying what the
+  part measures, under the weights sentence from `api/catalog.py`.
+- **Loading**: skeleton cards shaped like the content, and a thin indeterminate bar for work
+  that takes a while (searching, scoring, writing). No spinners.
+- **Feedback**: a `.notice` under the control that caused it, in one of four tones, which clears
+  itself after a few seconds. Never a traceback: the API sends a sentence and the screen shows it.
+- **Drafts**: the cover letter streams into the editor as the model writes it, with a Stop button.
+- **Motion**: the same 160 ms hover and colour changes, switched off under
+  `prefers-reduced-motion`. No scroll or cursor animation.

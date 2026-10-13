@@ -13,7 +13,7 @@ listed in [AGENTS.md](AGENTS.md).
 | Matching | scikit-learn TF-IDF + SentenceTransformers `all-MiniLM-L6-v2` (TF-IDF fallback if not installed) |
 | LLM | Ollama (Mistral / Llama 3.2) locally, Gemini free tier as fallback |
 | Database | SQLite via SQLAlchemy (PostgreSQL-ready) |
-| UI | Streamlit on `localhost:8501` |
+| UI | Streamlit on `localhost:8501`, or the React app (Vite + TypeScript) on `localhost:5173` over a local API on `127.0.0.1:8787` |
 
 ## Workflow
 
@@ -41,6 +41,27 @@ ollama pull llama3.2:3b                            # local LLM (https://ollama.c
 python scripts/init_db.py                          # creates or upgrades jobhunt.db
 streamlit run ui/app.py                            # open http://localhost:8501
 ```
+
+### The React front end (optional, same data)
+
+The React app in `web/` shows the same jobs, scores and documents as the Streamlit app, through a
+local API in `api/` that calls the same Python functions. Both are kept working; nothing about the
+backend changes when you switch between them.
+
+```bash
+python -m api                                      # the local API on http://127.0.0.1:8787
+
+# in another terminal, the first time only
+cd web && npm install
+
+# day to day, either:
+cd web && npm run dev                              # open http://127.0.0.1:5173 (reloads as you edit)
+cd web && npm run build                            # then open http://127.0.0.1:8787 (one URL, no node)
+```
+
+The API listens on 127.0.0.1 only, so nothing else on your Wi-Fi can reach your resume or your
+database. `JOBHUNT_API_PORT` in `.env` moves it if something else holds port 8787. Once `web/dist`
+has been built, `python -m api` serves the whole app by itself.
 
 On Windows: if `spacy download` fails with a 404, install the model wheel directly with
 `pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl`.
@@ -97,6 +118,8 @@ parser/          resume parser and job description analyzer
 matching/        ATS scorer, semantic matcher, confidence score
 generator/       LLM client, cover letters, resume suggestions, saved documents
 ui/              Streamlit dashboard
+api/             local FastAPI layer for the React app (read and call only, 127.0.0.1)
+web/             React + Vite + TypeScript front end (src/tabs, src/pages, theme.css)
 pipeline.py      end-to-end CLI
 tests/           pytest suite (no network, no heavy models needed)
 ```
@@ -126,6 +149,10 @@ Jobs are kept only when they are relevant to your keywords: a keyword must be in
 title or mentioned at least twice in the description (see `scraper/relevance.py`).
 
 ## Using the app
+
+The five tabs below are the same in both front ends. In the React app the sidebar, tabs and
+wording match; the Matches tab shows the list on the left and the job you picked on the right,
+with the score breakdown and what the parts mean.
 
 Start it with the project's environment (`.venv\Scripts\python -m streamlit run ui/app.py` on
 Windows); a different Python will be missing libraries. The line above the tabs shows your
