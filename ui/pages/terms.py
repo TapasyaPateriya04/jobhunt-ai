@@ -34,7 +34,7 @@ a recruiting service, and nobody reviews your applications on your behalf.
   every draft before you send it to an employer.
 - **Respect the job sites.** The built-in sources are public APIs and job boards whose
   robots.txt allows the app, and the app limits how often it asks them. LinkedIn and Naukri
-  do not allow automated access. If you turn them on through `JOBSPY_SITES`, you do so
+  do not allow automated access. If you turn them on in `.env`, you do so
   against those sites' terms and at your own risk, including the risk that they block you.
 - **Keep your keys private.** If you add a Gemini API key, it is yours to protect, and your
   use of Gemini is covered by Google's terms.

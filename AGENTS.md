@@ -54,6 +54,9 @@ source, setting, table and column is named in the docs, so a forgotten update fa
   add other exceptions without asking.
 - **Writing rules** (UI and docs): no em dashes, no emoji icons, no purple gradients, no pill
   shapes.
+- **Never name the scraping library in the UI** (owner's rule, 2026-10-12): user-visible text says
+  "LinkedIn" / "Naukri" and "turn them on in .env", not "JobSpy" or `JOBSPY_*` keys. Code, `.env`
+  keys and docs may name it; `tests/test_legal_pages.py` checks the UI strings.
 - **Personal data**: never copy, upload or commit the resume, `.env` or `jobhunt.db`.
 - **Defaults for search**: country India, roles Java / React, fresher level.
 - **Ask before installing system software** (Ollama models, Homebrew packages). Python

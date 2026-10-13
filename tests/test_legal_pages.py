@@ -83,3 +83,21 @@ class _Col:
 
     def __exit__(self, *exc):
         return False
+
+
+def test_ui_text_never_names_the_scraping_library():
+    """The owner's rule: the library behind LinkedIn and Naukri is not named anywhere a user reads."""
+    import ast
+
+    hits = []
+    for path in [UI / "app.py", UI / "components.py", *sorted((UI / "pages").glob("*.py"))]:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        docstrings = {id(n.body[0].value) for n in ast.walk(tree)
+                      if isinstance(n, (ast.Module, ast.FunctionDef, ast.ClassDef)) and n.body
+                      and isinstance(n.body[0], ast.Expr) and isinstance(n.body[0].value, ast.Constant)}
+        for node in ast.walk(tree):
+            text = node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else ""
+            # Identifiers (module paths, setting names, widget keys) are not shown to the user.
+            if "jobspy" in text.lower() and id(node) not in docstrings and not re.fullmatch(r"[\w.]+", text):
+                hits.append(f"{path.name}:{node.lineno}: {text[:60]}")
+    assert hits == []

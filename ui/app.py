@@ -519,8 +519,8 @@ def tab_scrape(settings) -> None:
             key="scrape_sources",
             help="The free public APIs allow programs. Himalayas lists remote jobs open to your country. "
                  "Greenhouse and Lever read the company career boards named in .env. LinkedIn and Naukri "
-                 "appear only when listed in JOBSPY_SITES, and are searched at most once per "
-                 "JOBSPY_REFRESH_MINUTES.")
+                 "appear only when you turn them on in .env, and are searched at most once per "
+                 "refresh interval (an hour by default).")
         submitted = st.form_submit_button("Find jobs", type="primary")
 
     if submitted:
@@ -615,8 +615,8 @@ def _jobspy_auto_refresh(settings) -> None:
     minutes = int(getattr(settings, "jobspy_refresh_minutes", 60) or 60)
     on = st.toggle(f"Refresh LinkedIn and Naukri every {minutes} min while this page is open",
                    value=True, key="jobspy_auto",
-                   help="Uses the keywords and location above. Each site is searched at most once per "
-                        "JOBSPY_REFRESH_MINUTES, also counting searches you start yourself.")
+                   help=f"Uses the keywords and location above. Each site is searched at most once every "
+                        f"{minutes} min, also counting searches you start yourself.")
     if not on:
         return
 
@@ -645,7 +645,7 @@ def _add_job_yourself(settings, keywords: str, location: str) -> None:
     with st.expander("Add a job yourself (LinkedIn or any other site)"):
         st.caption("The app never opens a link you paste here. Open the job in your browser, select the whole "
                    "posting, copy it and paste it here. LinkedIn forbids programs from reading its pages; "
-                   "it is searched only if you list it in JOBSPY_SITES.")
+                   "it is searched only if you turn it on in .env.")
         st.link_button("Search these keywords on LinkedIn",
                        manual.linkedin_search_url(keywords.strip(), location.strip()),
                        help="Opens LinkedIn in a new browser tab with the keywords and location above.")

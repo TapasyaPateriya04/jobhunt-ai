@@ -35,8 +35,8 @@ SOURCES = {
     "greenhouse": "Greenhouse company boards (set GREENHOUSE_BOARDS in .env)",
     "lever": "Lever company boards (set LEVER_COMPANIES in .env)",
     "himalayas": "Himalayas (free public API, remote jobs open to your country)",
-    "linkedin": "LinkedIn (JobSpy; LinkedIn forbids scraping, at most once an hour)",
-    "naukri": "Naukri (JobSpy; Naukri forbids scraping, at most once an hour)",
+    "linkedin": "LinkedIn (opt-in; LinkedIn forbids scraping, at most once an hour)",
+    "naukri": "Naukri (opt-in; Naukri forbids scraping, at most once an hour)",
 }
 JOBSPY_SOURCES = ["linkedin", "naukri"]
 DEFAULT_SOURCES = ["remoteok", "hn", "themuse", "arbeitnow", "himalayas"]
@@ -50,9 +50,9 @@ ETHICAL_NOTE = (
     "waits 3-5 s between requests, caps each session at 20-50 jobs and stores results so the same "
     "job is never fetched twice.\n\n"
     "**LinkedIn and Naukri are an exception you opt into.** Their `robots.txt` and terms forbid "
-    "automated access, so they are off unless listed in `JOBSPY_SITES` in .env. When listed, they are "
-    "searched through the JobSpy library without the robots check, with no login or proxies, at most "
-    "once per `JOBSPY_REFRESH_MINUTES` (60 by default). Indeed is never used. You can also paste a job "
+    "automated access, so they are off unless you turn them on in .env. When on, they are "
+    "searched without the robots check, with no login or proxies, at most once an hour by default. "
+    "Indeed is never used. You can also paste a job "
     "under **Add a job yourself**."
 )
 
