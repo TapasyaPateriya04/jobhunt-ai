@@ -1,0 +1,831 @@
+/* JobHunt AI theme: ink on warm paper, one slate-blue accent, Geist type.
+   Palette and specs: docs/DESIGN_SYSTEM.md ("The React app"), the written source of truth.
+   The React app has its own palette since the 2026-10-13 restyle; the Streamlit app keeps
+   its indigo theme until the owner moves it too.
+   Fonts are bundled in public/fonts (OFL), so the app loads nothing from the internet. */
+
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  /* Surfaces and text */
+  --paper: #f7f4ee;   /* app background */
+  --card: #fffdf8;    /* panels, rows, inputs */
+  --sunk: #efe9de;    /* hover, selected row, chips */
+  --line: #e4ddd1;    /* borders, dividers */
+  --line-2: #d3cabb;  /* control borders, a step stronger than --line */
+  --ink: #1c1a17;     /* headings, job titles */
+  --body: #44403a;    /* paragraphs, descriptions */
+  --muted: #6e675d;   /* captions, meta, labels */
+
+  /* The one accent */
+  --accent: #2f4858;
+  --accent-ink: #223644;  /* hover on the accent */
+  --accent-wash: #e2e8ee;
+  --accent-line: #b9c6d1;
+  --on-accent: #fffdf8;
+
+  /* Score bands and status: text, tint, border */
+  --ok: #2e5e45;    --ok-wash: #e3ede6;    --ok-line: #b7cfbf;     /* strong fit */
+  --warn: #7a5a16;  --warn-wash: #f2ead6;  --warn-line: #dcc893;   /* worth a look */
+  --bad: #8c4a33;   --bad-wash: #f3e3dd;   --bad-line: #deb8aa;    /* reach, gaps */
+  --applied: #33516b; --applied-wash: #e2e8ee; --applied-line: #b9c6d1;
+  --hidden: #6e675d;  --hidden-wash: #efe9de;  --hidden-line: #d3cabb;
+
+  /* Older names, kept so every component reads the same palette */
+  --surface: var(--card);
+  --wash: var(--sunk);
+  --ink-2: var(--body);
+  --hover: var(--sunk);
+
+  /* Shape, depth, spacing (4/8/12/16/24/32/48) */
+  --r-sm: 6px;  /* chips and tags */
+  --r: 8px;     /* controls */
+  --r-lg: 10px; /* cards */
+  --shadow: 0 1px 2px rgba(28, 26, 23, 0.04);
+  --shadow-hi: 0 1px 2px rgba(28, 26, 23, 0.05), 0 6px 16px rgba(28, 26, 23, 0.06);
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+
+  --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --gap: var(--s4);
+  --pad: var(--s5);
+  --sidebar: 248px;
+  --shell: 1400px;
+  --measure: 680px;
+  --curve: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease: 160ms var(--curve);
+  --topbar-h: 57px;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Warm charcoal with a brown bias, not blue-black. */
+  :root {
+    --paper: #141311;
+    --card: #1c1b18;
+    --sunk: #26241f;
+    --line: #34312b;
+    --line-2: #423e36;
+    --ink: #f2ede3;
+    --body: #cfc8bb;
+    --muted: #978f82;
+
+    --accent: #8fb0ce;
+    --accent-ink: #a9c3db;
+    --accent-wash: #1c2430;
+    --accent-line: #34465a;
+    --on-accent: #141311;
+
+    --ok: #76b88d;    --ok-wash: #1c2a21;    --ok-line: #2f4a38;
+    --warn: #d3a95c;  --warn-wash: #2b2518;  --warn-line: #4d4027;
+    --bad: #dc8e78;   --bad-wash: #2e201b;   --bad-line: #50352c;
+    --applied: #8fb0ce; --applied-wash: #1c2430; --applied-line: #34465a;
+    --hidden: #978f82;  --hidden-wash: #26241f;  --hidden-line: #423e36;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-hi: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 16px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { min-height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--body);
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: tabular-nums;
+}
+::selection { background: var(--accent-wash); color: var(--ink); }
+
+/* Scale: display 40, h1 28, h2 20, title 16. Headings 600; 700 is kept for the score. */
+h1, h2, h3, h4 { margin: 0; font-weight: 600; color: var(--ink); letter-spacing: -0.02em; }
+.display { font-size: 40px; line-height: 1.1; letter-spacing: -0.035em; font-weight: 600; color: var(--ink); }
+h1 { font-size: 28px; line-height: 1.2; letter-spacing: -0.03em; }
+h2 { font-size: 20px; line-height: 1.3; letter-spacing: -0.02em; }
+h3 { font-size: 16px; line-height: 1.4; letter-spacing: -0.01em; }
+h4 { font-size: 14px; line-height: 1.4; letter-spacing: -0.005em; }
+p { margin: 0 0 0.7em; }
+p:last-child { margin-bottom: 0; }
+
+/* Mono section label: SCORE BREAKDOWN, SKILLS, DESCRIPTION. */
+.label-mono {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 var(--s3);
+}
+
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-line); }
+a:hover { color: var(--accent-ink); border-bottom-color: var(--accent); }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ------------------------------------------------------------------ shell */
+
+.shell { max-width: var(--shell); margin: 0 auto; padding: 0 var(--s5) var(--s7); }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  /* Opaque: a see-through bar let the list text ghost through it while scrolling. */
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+/* Logo left, tabs centre, resume file right. */
+.topbar-inner {
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: 0 var(--s5);
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s4);
+}
+.topbar-inner > :last-child { justify-self: end; }
+.wordmark {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-weight: 600; letter-spacing: -0.03em; font-size: 16px; color: var(--ink);
+  justify-self: start;
+}
+.wordmark span.mark { width: 14px; height: 14px; border-radius: 3px; background: var(--accent); display: inline-block; }
+.topbar .spacer { display: none; }
+.topbar .note, .topbar .file {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.topbar .tabs.nav { border-bottom: 0; margin: 0; align-self: stretch; }
+.topbar .tabs.nav button { min-height: 56px; padding: 0 var(--s3); }
+.topbar .tabs.nav button::after { bottom: 0; }
+
+@media (max-width: 900px) {
+  .topbar-inner { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0; padding: 0 var(--s4); }
+  .topbar .tabs.nav { grid-column: 1 / -1; grid-row: 2; border-top: 1px solid var(--line); margin: 0 calc(-1 * var(--s4)); padding: 0 var(--s2); }
+  .topbar .tabs.nav button { min-height: 46px; }
+  .wordmark { min-height: 52px; }
+  .topbar .file { display: block; line-height: 52px; }
+  .shell { padding: 0 var(--s4) var(--s7); }
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+  gap: var(--s6);
+  align-items: start;
+  margin-top: var(--s5);
+}
+/* Matches needs the full width for the list and the job side by side. */
+.layout.wide { grid-template-columns: minmax(0, 1fr); }
+.sidebar { display: grid; gap: var(--s4); position: sticky; top: calc(var(--topbar-h) + var(--s5)); }
+.main { min-width: 0; display: grid; gap: var(--gap); }
+/* One tab's content: the same rhythm as the main column, faded in when the tab changes. */
+.tabpanel { min-width: 0; display: grid; gap: var(--gap); }
+
+/* The sidebar is reference, not work: plain sections split by hairlines, not more cards. */
+.sidebar .card {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 0 var(--s4);
+}
+.sidebar .card:last-child { border-bottom: 0; }
+.sidebar .card-title {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); font-weight: 500; margin-bottom: var(--s2); min-height: 0;
+}
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: var(--s5); }
+  .sidebar { position: static; order: 2; border-top: 1px solid var(--line); padding-top: var(--s5); }
+}
+
+/* ------------------------------------------------------------------ cards */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--pad);
+  box-shadow: var(--shadow);
+}
+.card.flat { box-shadow: none; }
+.card.wash { background: var(--sunk); border-color: transparent; box-shadow: none; }
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  margin-bottom: var(--s3);
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 28px;
+}
+.card-title .count { color: var(--muted); font-weight: 400; font-family: var(--mono); font-size: 12.5px; }
+.muted { color: var(--muted); }
+.hint { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.row { display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap; }
+.row.tight { gap: 6px; }
+.row.end { justify-content: flex-end; }
+.stack { display: grid; gap: var(--s3); }
+.divider { height: 1px; background: var(--line); margin: var(--s4) 0; border: 0; }
+
+/* ------------------------------------------------------------------ tabs */
+
+/* Underline tabs everywhere, never pills: the tab in use has a 2 px accent bar under it. */
+.tabs {
+  display: flex;
+  scroll-margin-top: calc(var(--topbar-h) + 8px);
+  gap: var(--s1);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button {
+  position: relative;
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 var(--s3);
+  min-height: 40px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--ease);
+}
+.tabs button::after {
+  content: "";
+  position: absolute;
+  left: var(--s3);
+  right: var(--s3);
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transition: transform var(--ease);
+}
+.tabs button:hover:not(:disabled) { background: transparent; color: var(--ink); border: 0; }
+.tabs button:active:not(:disabled) { transform: none; }
+.tabs button[aria-selected="true"] { color: var(--ink); }
+.tabs button[aria-selected="true"]::after { transform: scaleX(1); }
+.tabs button:focus-visible { outline-offset: -2px; }
+.tabs .tab-count { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: 6px; }
+.tabs.nav button { font-size: 14.5px; }
+
+/* ------------------------------------------------------------------ stats */
+
+/* Headline numbers: one strip split by hairlines. Each tile draws its right and bottom
+   line; the frame clips the ones on the outer edge, so a short last row leaves no gap. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.stats > div {
+  padding: var(--s3) var(--s4);
+  display: grid;
+  gap: 2px;
+  box-shadow: 1px 0 0 var(--line), 0 1px 0 var(--line);
+}
+.stats b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--ink); letter-spacing: -0.03em; line-height: 1.25; }
+.stats span { color: var(--muted); font-size: 12.5px; }
+
+.next {
+  background: var(--sunk);
+  border-radius: var(--r-lg);
+  padding: var(--s2) var(--s3) var(--s2) var(--s4);
+  min-height: 52px;
+  display: flex;
+  gap: var(--s3);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--body);
+}
+.next b { color: var(--ink); font-weight: 600; }
+
+/* ------------------------------------------------------------------ controls */
+
+/* Buttons: 40 px tall with a 44 px tap area. Primary filled, secondary bordered,
+   tertiary (.quiet) text only. */
+button, .btn {
+  position: relative;
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 var(--s4);
+  border-radius: var(--r);
+  border: 1px solid var(--line-2);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  white-space: nowrap;
+  box-shadow: none;
+  transition: background var(--ease), border-color var(--ease), color var(--ease), transform var(--ease);
+}
+/* The tap area reaches 44 px without making the button look taller. */
+button::before, .btn::before { content: ""; position: absolute; inset: -2px 0; }
+button:hover:not(:disabled), .btn:hover { border-color: var(--muted); background: var(--sunk); }
+button:active:not(:disabled), .btn:active { transform: translateY(1px); }
+button:disabled { color: var(--muted); background: var(--sunk); border-color: var(--line); cursor: not-allowed; }
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+button.primary:hover:not(:disabled) { background: var(--accent-ink); border-color: var(--accent-ink); }
+button.primary:disabled { background: var(--sunk); border-color: var(--line); color: var(--muted); }
+button.quiet { border-color: transparent; background: transparent; color: var(--body); padding: 0 var(--s3); }
+button.quiet:hover:not(:disabled) { background: var(--sunk); border-color: transparent; color: var(--ink); }
+button.small, .btn.small { height: 32px; min-height: 32px; padding: 0 var(--s3); font-size: 13px; }
+button.small::before, .btn.small::before { inset: -6px 0; }
+a.btn { border-bottom: 1px solid var(--line-2); color: var(--ink); }
+a.btn:hover { border-bottom-color: var(--muted); }
+/* A text link styled like the other actions in a row. */
+a.link { display: inline-flex; align-items: center; gap: 6px; height: 40px; border-bottom: 0; font-weight: 500; font-size: 14px; }
+a.link:hover { text-decoration: underline; text-underline-offset: 3px; }
+button.linklike { border: 0; background: transparent; color: var(--accent); padding: 0; height: auto; min-height: 0; font-size: 13.5px; }
+button.linklike:hover:not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+
+label.field { display: grid; gap: 6px; font-size: 13.5px; font-weight: 500; color: var(--ink); align-content: start; }
+label.field .help { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+input[type="text"], input[type="number"], input[type="url"], select, textarea {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  padding: 0 var(--s3);
+  height: 40px;
+  min-height: 40px;
+  width: 100%;
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+select { padding-right: var(--s5); }
+textarea { height: auto; min-height: 120px; padding: 10px var(--s3); resize: vertical; line-height: 1.55; }
+::placeholder { color: var(--muted); opacity: 1; }
+input:hover, select:hover, textarea:hover { border-color: var(--muted); }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+input[type="range"] { padding: 0; height: 28px; min-height: 28px; accent-color: var(--accent); border: 0; background: none; box-shadow: none; }
+input[type="checkbox"] { width: 17px; height: 17px; min-height: 0; accent-color: var(--accent); }
+label.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--ink); min-height: 40px; padding-top: 10px; cursor: pointer; }
+label.check input { margin: 2px 0 0; flex: 0 0 auto; }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s3) var(--s4); align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--s3) var(--s4); align-items: start; }
+
+.file-drop {
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--sunk);
+  padding: var(--s5);
+  text-align: center;
+  display: grid;
+  gap: var(--s2);
+  justify-items: center;
+  transition: border-color var(--ease), background var(--ease);
+}
+.file-drop.over { border-color: var(--accent); background: var(--accent-wash); }
+.file-drop input[type="file"] { display: none; }
+
+/* ------------------------------------------------------------------ chips and tags */
+
+/* Skill tags: always bordered, 24 px tall. A matched skill has a green tick, a gap says
+   "missing" in words; colour only reinforces it. */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  color: var(--body);
+  white-space: nowrap;
+}
+.chip.accent { background: var(--accent-wash); border-color: var(--accent-line); color: var(--accent); }
+.chip.ok svg { color: var(--ok); }
+.chip.miss { background: var(--bad-wash); border-color: var(--bad-line); color: var(--bad); }
+.chip.miss .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.85; }
+.chip.warn { background: var(--warn-wash); border-color: var(--warn-line); color: var(--warn); }
+.chip .num { font-family: var(--mono); }
+.chip button { all: unset; cursor: pointer; line-height: 1; display: inline-flex; }
+.chip button::before { content: none; }
+
+/* Badges (status, location): the same 24 px box as a tag, tinted by meaning. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  background: var(--sunk);
+  color: var(--body);
+  white-space: nowrap;
+}
+.badge.ok { background: var(--ok-wash); border-color: var(--ok-line); color: var(--ok); }
+.badge.bad { background: var(--bad-wash); border-color: var(--bad-line); color: var(--bad); }
+.badge.accent, .badge.applied { background: var(--applied-wash); border-color: var(--applied-line); color: var(--applied); }
+.badge.hidden { background: var(--hidden-wash); border-color: var(--hidden-line); color: var(--hidden); }
+
+/* ------------------------------------------------------------------ job list and detail */
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s4);
+}
+/* On a wide screen the list and the job each scroll on their own inside one screen-high
+   frame, so the job you picked stays in view however long its detail is. */
+@media (min-width: 1120px) {
+  .split {
+    grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
+    height: calc(100vh - var(--topbar-h) - 16px);
+    scroll-margin-top: calc(var(--topbar-h) + 8px);
+  }
+  .split .joblist, .split .detail { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+  /* Rows keep their own height; without this the fixed-height grid squeezes them. */
+  .split .joblist { align-content: start; grid-auto-rows: max-content; }
+  .split .detail { scrollbar-gutter: stable; }
+}
+
+/* Below that width the job opens as a sheet over the list, with a way back. */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--paper);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: sheet 220ms var(--curve) backwards;
+}
+@keyframes sheet { from { opacity: 0; transform: translateY(12px); } }
+.sheet-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s4);
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.sheet-body { padding: var(--s4) var(--s4) var(--s6); }
+
+/* A job list is one bordered frame with rows split by hairlines, not a stack of cards. */
+.joblist {
+  display: grid;
+  /* Without the explicit column the rows take their widest content and spill out of the list. */
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.jobrow {
+  position: relative;
+  text-align: left;
+  display: grid;
+  /* An explicit column, or a short card lays its content out on a narrower auto column. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s2);
+  width: 100%;
+  height: auto;
+  padding: var(--s4);
+  background: var(--card);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  white-space: normal;
+  font-weight: 400;
+  color: var(--body);
+  min-height: 0;
+  transition: background var(--ease);
+}
+.jobrow::before { display: none; }
+.jobrow:last-child { border-bottom: 0; }
+button.jobrow:hover:not(:disabled) { background: var(--paper); border-color: var(--line); }
+button.jobrow:active:not(:disabled) { transform: none; }
+.jobrow:focus-visible { outline-offset: -2px; border-radius: 0; }
+/* The job in view: the sunk fill with a 2 px accent bar on its left edge (shape, not colour alone). */
+.jobrow[aria-selected="true"], .jobrow[aria-current="true"],
+button.jobrow[aria-selected="true"]:hover { background: var(--sunk); box-shadow: inset 2px 0 0 var(--accent); }
+.joblist > button:not(.jobrow) {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--body);
+  height: 44px;
+}
+.joblist > button:not(.jobrow):hover:not(:disabled) { background: var(--sunk); color: var(--ink); }
+.jobrow .places { color: var(--body); font-weight: 500; }
+.jobrow .head { display: flex; gap: var(--s4); align-items: flex-start; justify-content: space-between; }
+/* The text column must be allowed to shrink, or a long meta line pushes the score out. */
+.jobrow .head > :first-child { min-width: 0; flex: 1 1 auto; display: grid; gap: 2px; }
+.jobrow .title { font-size: 16px; font-weight: 600; color: var(--ink); letter-spacing: -0.012em; line-height: 1.35; margin: 0; }
+.jobrow .sub { font-size: 13.5px; color: var(--body); }
+.meta { color: var(--muted); font-size: 12.5px; }
+/* Each fact stays whole: a line breaks at a separator, not inside "1 day ago". */
+.meta { display: block; }
+.meta > span { white-space: nowrap; }
+.meta > .sep { white-space: normal; }
+.meta.mono { font-family: var(--mono); font-size: 12px; }
+
+/* Score: the number (mono 700) over a chip with the band word, both in the band's colour;
+   the chip has a tint and a border of the same hue. A cap note may sit under it. */
+.score {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.score .num {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--muted);
+}
+.score .band {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hidden-line);
+  background: var(--hidden-wash);
+  color: var(--hidden);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+.score .cap { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.score.strong .num { color: var(--ok); }
+.score.strong .band { color: var(--ok); background: var(--ok-wash); border-color: var(--ok-line); }
+.score.possible .num { color: var(--warn); }
+.score.possible .band { color: var(--warn); background: var(--warn-wash); border-color: var(--warn-line); }
+.score.weak .num { color: var(--bad); }
+.score.weak .band { color: var(--bad); background: var(--bad-wash); border-color: var(--bad-line); }
+.score.large .num { font-size: 40px; letter-spacing: -0.04em; }
+
+/* Score bars: label left, fraction right in mono, the filled bar underneath. */
+.bars { display: grid; gap: var(--s4); }
+.bar { display: grid; grid-template-columns: 1fr auto; gap: 6px var(--s3); align-items: baseline; }
+.bar h4 { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.bar .label { font-size: 14px; font-weight: 500; color: var(--ink); }
+.bar .value { font-family: var(--mono); font-size: 13px; color: var(--body); }
+.bar .track {
+  grid-column: 1 / -1;
+  height: 6px;
+  background: var(--sunk);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar .fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; transform-origin: left; animation: grow 420ms var(--curve) both; }
+@keyframes grow { from { transform: scaleX(0); } }
+.bar .about { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+
+.countbars { display: grid; gap: var(--s2); }
+.countbar { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr auto; gap: var(--s2); align-items: center; font-size: 13px; }
+.countbar .track { height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; }
+.countbar .fill { display: block; height: 100%; background: var(--accent); opacity: 0.55; border-radius: 3px; }
+.countbar .n { font-family: var(--mono); color: var(--body); }
+
+.guide { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.guide h4 { margin-bottom: var(--s1); }
+.guide ul { margin: 0; padding-left: 18px; color: var(--body); font-size: 13.5px; }
+.guide li { margin: 3px 0; }
+
+.posting {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--body);
+  max-width: var(--measure);
+}
+.posting h5 { margin: var(--s4) 0 var(--s1); font-size: 14px; color: var(--ink); }
+.posting ul { margin: var(--s1) 0 var(--s3); padding-left: 20px; }
+.posting li { margin: 2px 0; }
+
+/* The job's own pane: header, actions, then sections with mono labels. */
+.detail-head { display: flex; gap: var(--s5); align-items: flex-start; justify-content: space-between; }
+.detail-head > :first-child { min-width: 0; display: grid; gap: 6px; }
+.actions { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.actions .spacer { flex: 1 1 auto; }
+.status-line { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.status-line select { width: auto; min-width: 160px; }
+.section { padding-top: var(--s5); margin-top: var(--s5); border-top: 1px solid var(--line); }
+.section-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--s5) var(--s6); }
+@media (max-width: 560px) {
+  .detail-head h1 { font-size: 22px; }
+  .score.large .num { font-size: 32px; }
+}
+
+/* Filter row on Matches: every control in the row is 40 px and sits on one baseline. */
+.filterbar {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) repeat(3, minmax(140px, 1fr));
+  gap: var(--s3);
+  align-items: start;
+}
+.filterbar label.field > span:first-child { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.filtermore {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--s3) var(--s5);
+  align-items: start;
+  margin-top: var(--s4);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+.resultline { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; font-size: 13.5px; min-height: 32px; }
+.resultline .spacer { flex: 1 1 auto; }
+.morefilters { margin-top: var(--s4); border-top: 1px solid var(--line); }
+.morefilters summary {
+  display: flex; align-items: center; min-height: 44px; cursor: pointer;
+  font-size: 14px; font-weight: 500; color: var(--ink);
+}
+.morefilters .filtermore { margin-top: 0; padding-top: var(--s2); border-top: 0; }
+@media (max-width: 760px) {
+  .filterbar { grid-template-columns: 1fr 1fr; }
+  .filterbar > :first-child, .filterbar > :last-child { grid-column: 1 / -1; }
+}
+
+/* ------------------------------------------------------------------ feedback */
+
+/* Notices: a warm tint card, no border, body text inside. */
+.notice {
+  border: 0;
+  border-radius: var(--r-lg);
+  padding: var(--s3) var(--s4);
+  background: var(--sunk);
+  color: var(--body);
+  font-size: 14px;
+}
+.notice.ok { background: var(--ok-wash); }
+.notice.warn { background: var(--warn-wash); }
+.notice.bad { background: var(--bad-wash); }
+.notice.info { background: var(--accent-wash); }
+.notice b, .notice strong { color: var(--ink); }
+
+.empty {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: var(--s5);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--card);
+}
+.empty .icon {
+  color: var(--body);
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r);
+  background: var(--sunk);
+  margin-bottom: 6px;
+}
+.empty h4 { font-size: 16px; }
+.empty p { color: var(--muted); max-width: 52ch; font-size: 14px; }
+
+.dot { width: 8px; height: 8px; border-radius: 2px; background: var(--line-2); display: inline-block; flex: 0 0 auto; }
+.dot.on { background: var(--ok); }
+.status-row { display: flex; align-items: center; gap: var(--s2); font-size: 13.5px; }
+.status-row .label { font-weight: 500; color: var(--ink); }
+
+/* Placeholder blocks: a flat fill that breathes in opacity (no shimmer gradient). */
+.skeleton {
+  background: var(--sunk);
+  border-radius: var(--r-sm);
+  animation: breathe 1.3s ease-in-out infinite;
+}
+@keyframes breathe { 50% { opacity: 0.45; } }
+
+.progress { height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; display: block; }
+.progress .fill { display: block; height: 100%; width: 40%; background: var(--accent); border-radius: 3px; transform-origin: left; animation: crawl 1.4s var(--curve) infinite; }
+@keyframes crawl { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+
+/* State changes (a new tab, another job) fade in: opacity and a 4 px rise, nothing more.
+   "backwards", not "both": a transform left on after the fade would trap the job sheet
+   (position: fixed) inside the tab instead of covering the screen. */
+.enter { animation: enter 200ms var(--curve) backwards; }
+@keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+
+/* ------------------------------------------------------------------ legal pages and footer */
+
+.footer {
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: var(--s5) var(--s5) var(--s6);
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: var(--s4);
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+.footer .spacer { flex: 1 1 auto; }
+
+.prose { max-width: var(--measure); line-height: 1.65; color: var(--body); }
+.prose h1 { margin-bottom: var(--s3); }
+.prose h2 { margin: var(--s6) 0 var(--s2); }
+.prose strong { color: var(--ink); }
+.prose ul { padding-left: 20px; }
+.prose li { margin: 6px 0; }
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

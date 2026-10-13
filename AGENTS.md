@@ -1,12 +1,13 @@
 # AGENTS.md: how an AI coding agent should work here
 
 > Read this first. Keep it current: when the owner states a new rule or preference, add it
-> here in the same session. Last reviewed: 2026-10-12.
+> here in the same session. Last reviewed: 2026-10-13.
 
 ## Project in one line
 
-JobHunt AI is a personal, local-first Streamlit app that collects jobs, scores them against
-the owner's resume and drafts cover letters. Owner: Arpit, an India-based fresher looking
+JobHunt AI is a personal, local-first app that collects jobs, scores them against the owner's
+resume and drafts cover letters. It has two front ends: the Streamlit app (`ui/`) and a React
+app (`web/`) over a local read-and-call API (`api/`). Owner: Arpit, an India-based fresher looking
 for Java / React roles. Repo: `TapasyaPateriya04/jobhunt-ai`.
 
 ## Read before changing code
@@ -46,7 +47,11 @@ source, setting, table and column is named in the docs, so a forgotten update fa
   merges; never push, open or merge a PR unless asked.
 - **Work on a branch** (e.g. `claude/<topic>`), not on `main`.
 - **Keep existing UI controls** (sliders, checkboxes, expanders, tabs); add a control only
-  where there was none. Use the `streamlit-ui-ux` skill for UI work.
+  where there was none. Use the `streamlit-ui-ux` skill for Streamlit work.
+- **Two front ends, one backend** (owner's ask, 2026-10-13): the React app is being built in
+  `web/` with a thin API in `api/`. The API only calls existing backend functions; a change to
+  scoring, scraping or generation belongs in the Python modules, not in `api/` or `web/`. Both
+  front ends stay working until the owner says the Streamlit one can go.
 - **Scraping**: official APIs only, robots.txt obeyed, rate limited. The only exception is
   the opt-in JobSpy source for LinkedIn and Naukri, approved 2026-10-12: no login, no
   proxies, at most once per `JOBSPY_REFRESH_MINUTES` (60 by default; the owner asked for

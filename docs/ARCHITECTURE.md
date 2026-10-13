@@ -2,13 +2,15 @@
 
 > Keep this current. A new module, source, setting or data flow updates this file in the
 > same commit; `tests/test_docs.py` fails when a job source or setting is missing here.
-> Function-level signatures live in [CONTRACTS.md](CONTRACTS.md). Last reviewed: 2026-10-12.
+> Function-level signatures live in [CONTRACTS.md](CONTRACTS.md). Last reviewed: 2026-10-13.
 
 ## Shape
 
-A single-process Python app. Streamlit (`ui/app.py`) is the only front end; `pipeline.py`
-runs the same flow from the command line. Everything is local: a SQLite file, a docs
-folder, and optionally an Ollama server on localhost.
+A local Python app with two front ends over one backend. Streamlit (`ui/app.py`) and the
+React app in `web/` show the same data; `pipeline.py` runs the same flow from the command
+line. React talks to `api/`, a thin FastAPI layer that only calls the functions below and
+listens on 127.0.0.1. Everything is local: a SQLite file, a docs folder, and optionally an
+Ollama server on localhost.
 
 ```
  resume file ──► parser/ ──────────────┐
@@ -17,7 +19,8 @@ folder, and optionally an Ollama server on localhost.
                                        │
                                        ▼
                            generator/ (Ollama / Gemini) ──► docs_dir (.docx/.pdf)
-        ui/app.py drives all of it; security/ wraps every boundary
+        ui/app.py (Streamlit) and api/ -> web/ (React) drive all of it;
+        security/ wraps every boundary
 ```
 
 ## Packages
@@ -32,6 +35,8 @@ folder, and optionally an Ollama server on localhost.
 | `matching/` | ATS keyword score, semantic score, location fit, skill gap, the weighted `confidence_score`, `evaluation` metrics |
 | `generator/` | `llm.call_llm` (Ollama, then Gemini), cover letter, resume suggestions, requirement split, `fact_check`, document saving |
 | `ui/` | `app.py` (tabs and flows), `components.py` (CSS, cards, helpers, source names), `export.py` (Word/PDF), `pages/privacy.py` and `pages/terms.py` (linked from the footer), `static/` (bundled fonts, favicon) |
+| `api/` | The local HTTP layer for React: `main.py` (app, routes, serves `web/dist`), `server.py` (uvicorn on 127.0.0.1), `core.py` (settings, lazy imports), `catalog.py` (names and wording), `matching_view.py` (match annotation), `routes_*.py` (meta, resume, jobs, matches, documents). Read and call only: no source, score or prompt of its own |
+| `web/` | React + Vite + TypeScript app: `src/state.tsx` (resume, country, model), `src/api.ts` (every call), `src/theme.css` (tokens), `src/tabs/` (the five tabs), `src/pages/` (privacy, terms), `public/` (favicon, bundled Geist) |
 | `scripts/` | `init_db`, `housekeeping`, `evaluate_matching`, `record_demo` |
 
 ## Job sources
@@ -69,7 +74,10 @@ instead by a per-site wait of `JOBSPY_REFRESH_MINUTES` stored in
    `fit = 0.6 ATS + 0.4 semantic`, `reach = 0.75 experience + 0.25 freshness`,
    `total = fit x (0.4 + 0.6 reach/100)` with caps when skills are low, multiplied by a
    location factor (1.0 to 0.4) when `CANDIDATE_COUNTRY` is set. Saved as `matches` rows.
-4. **Documents**: prompt built with resume and job text fenced by `prompt_guard`, sent to
+4. **React**: the browser loads `web/dist` (or Vite's dev server, which proxies `/api`), reads
+   `/api/catalog` and `/api/status` once, then calls the same functions as above through
+   `api/routes_*.py`. Drafts stream from `/api/documents/draft` as the model writes them.
+5. **Documents**: prompt built with resume and job text fenced by `prompt_guard`, sent to
    `stream_llm` (Ollama with `think: false` so thinking models such as qwen3.5 answer directly,
    then Gemini), shown as it is written with `st.write_stream`, checked by `fact_check`, saved to `docs_dir`
    and the `documents` table, exported by `ui/export.py`.
@@ -92,11 +100,13 @@ instead by a per-site wait of `JOBSPY_REFRESH_MINUTES` stored in
 | `JOBSPY_REFRESH_MINUTES` | 60 (min 30) | Wait between searches of one JobSpy site |
 | `JOBSPY_HOURS_OLD`, `JOBSPY_RESULTS_PER_SITE` | 72, 15 | JobSpy result limits |
 | `JOBSPY_AUTO_REFRESH` | true | Show the auto-refresh toggle |
+| `JOBHUNT_API_PORT` | 8787 | Port of the local API for the React front end (127.0.0.1 only) |
 | `LOG_LEVEL` | INFO | Log verbosity |
 
 ## Degrading gracefully
 
 Heavy or optional libraries (spaCy, sentence-transformers, google-genai, JobSpy) are
 imported lazily. Without them: skills come from the vocabulary only, semantic score uses
-TF-IDF, Gemini is off, JobSpy sources return nothing. The UI loads modules through
-`components.load` and shows a readable message instead of crashing.
+TF-IDF, Gemini is off, JobSpy sources return nothing. Streamlit loads modules through
+`components.load` and the API through `api.core.load`; both turn a missing library into a
+sentence (the API answers 503 with it) instead of crashing.

@@ -1,12 +1,12 @@
 # Testing: how we know it works
 
 > Keep this current. New test files, markers or CI steps update this file in the same commit.
-> Last reviewed: 2026-10-12.
+> Last reviewed: 2026-10-13.
 
 ## Run
 
 ```bash
-python -m pytest -q                 # everything that runs offline (about 1 080 tests, ~30 s)
+python -m pytest -q                 # everything that runs offline (about 1 100 tests, ~30 s)
 python -m pytest -m live -v         # also hit the real job APIs (needs network)
 python -m pytest -m localdata       # also check your own jobhunt.db postings
 python scripts/evaluate_matching.py # matching quality on the labelled jobs
@@ -30,6 +30,7 @@ Behind a proxy that breaks SSL to huggingface.co (the office network), set
 | `tests/test_db.py`, `tests/test_housekeeping.py` | Repository, migrations, backups, clean-up |
 | `tests/test_generator.py`, `tests/test_fact_check.py` | LLM calls (mocked), documents, claim checks |
 | `tests/test_ui.py` | Streamlit `AppTest` smoke tests of every tab and main flow |
+| `tests/test_api.py` | The local API for the React app: routes, the resume to matches to documents flow, names kept in step with `ui/components.py`, loopback-only binding, and the front-end wording rules (no em dashes, emoji, pill shapes, gradients or the scraping library's name) |
 | `tests/test_legal_pages.py` | Privacy and terms pages render and are linked; UI code keeps the design rules (no em dashes, emoji, pill shapes or gradients) |
 | `tests/test_docs.py` | The docs in `docs/` name every job source, setting, table and column |
 | `tests/test_live.py` | `live` marker: real network calls |
@@ -63,3 +64,11 @@ descriptions).
 2. For UI changes: start the app (`python -m streamlit run ui/app.py`) and click through the
    changed screen, including an empty and an error state.
 3. For matching changes: `scripts/evaluate_matching.py` does not get worse.
+
+## The React front end
+
+`cd web && npm run build` runs `tsc --noEmit` first, so a type error fails the build. There is no
+separate JavaScript test suite: what the screens must not do (name the scraping library, use em
+dashes, emoji, pill shapes or gradients, lose the favicon or the legal pages) is checked from
+Python in `tests/test_api.py`, which also exercises every route the screens call. CI does not
+install Node, so run the build yourself before asking for a commit.

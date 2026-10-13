@@ -1,7 +1,7 @@
 # PRD: what we are building
 
 > Keep this current. When a feature is added, changed or dropped, update this file in the
-> same commit. Last reviewed: 2026-10-12.
+> same commit. Last reviewed: 2026-10-13.
 
 ## Problem
 
@@ -11,7 +11,9 @@ cover letter tuned to the posting. Doing this by hand is slow and paid tools cos
 
 ## Product
 
-JobHunt AI is a personal, local-first app that runs on one laptop (Windows 11 or macOS):
+JobHunt AI is a personal, local-first app that runs on one laptop (Windows 11 or macOS). It has
+two front ends over one backend: the Streamlit app and a React app, which show the same data and
+stay in step until the owner says the Streamlit one can go.
 
 1. **Read the resume** (`.tex`, `.txt`, `.md`, `.pdf`) and pull out skills, experience and
    education. Skills the file misses can be typed in.
@@ -54,6 +56,7 @@ One person, on their own machine. No accounts, no server, no sharing.
 | Cover letter and resume suggestions, fact check, Word/PDF export | Documents | Done |
 | Privacy policy and terms pages, linked from a footer on every page; favicon | All | Done 2026-10-12 |
 | UI restyle (Geist type, indigo on warm paper, job list with detail pane) | All | In progress |
+| React front end (`web/`) over a local API (`api/`), same five tabs and data | All | In progress 2026-10-13 |
 
 ## Out of scope (for now)
 

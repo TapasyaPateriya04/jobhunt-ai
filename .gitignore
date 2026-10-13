@@ -11,6 +11,10 @@ jobhunt_docs/
 .pytest_cache/
 .streamlit/secrets.toml
 
+# React front end: installed packages and the build output
+web/node_modules/
+web/dist/
+
 # Local evaluation snapshots (scraped job text and your resume); labels are committed
 eval/jobs_snapshot.json
 eval/resume_snapshot.json

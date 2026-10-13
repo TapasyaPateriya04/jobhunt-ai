@@ -354,4 +354,4 @@ def test_ui_bands_match_the_scorer():
     from ui import components as c
 
     assert (c.STRONG_AT, c.POSSIBLE_AT) == (cs.STRONG_AT, cs.POSSIBLE_AT)
-    assert c.score_label(cs.STRONG_AT) == "Strong match" and c.score_label(cs.POSSIBLE_AT - 1) == "Weak match"
+    assert c.score_label(cs.STRONG_AT) == "Strong fit" and c.score_label(cs.POSSIBLE_AT - 1) == "Reach"

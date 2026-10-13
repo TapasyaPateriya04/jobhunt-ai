@@ -2,9 +2,10 @@
 
 > Keep this current. A change to `.streamlit/config.toml` `[theme]`, the `--jh-*` tokens or the
 > CSS in `ui/components.py`, or a new UI pattern, updates this file in the same commit.
-> Last reviewed: 2026-10-12. Palette chosen by Arpit on 2026-10-12: ink on warm paper with one
-> indigo accent, Geist type. A job list with a detail pane and score breakdown bars is coming
-> soon; describe it here when it lands.
+> Last reviewed: 2026-10-13. Palette chosen by Arpit on 2026-10-12: ink on warm paper with one
+> indigo accent, Geist type. On 2026-10-13 Arpit gave the React app (`web/`) its own design
+> system: warm paper with one slate-blue accent (`#2F4858`), described under "The React app".
+> The Streamlit app keeps the indigo theme below until the owner moves it too.
 
 ## Feel
 
@@ -24,6 +25,10 @@ hover and color changes (cards lift, buttons gain a shadow, tabs shift), switche
 | Components | `ui/components.py` helpers | Job card, chips, score bar, empty state, panel title |
 | Page frame | `c.page_setup(title)`, `c.legal_footer()` | Tab title, favicon (`ui/static/favicon.png`), styles, footer links on every page |
 | Legal pages | `ui/pages/privacy.py`, `ui/pages/terms.py` | Privacy policy, terms and conditions (hidden from the sidebar; `client.showSidebarNavigation = false`) |
+| React tokens | `web/src/theme.css` `:root` | The same palette and type for the React app, plus its own components |
+
+The Streamlit theme and the `--jh-*` tokens must carry the same values. `web/src/theme.css`
+has its own palette since 2026-10-13 (see "The React app").
 
 The theme and the `--jh-*` tokens must carry the same values; change both together.
 
@@ -50,7 +55,7 @@ values into new code):
 | Background | `#F7F6F2` warm paper; sidebar and fills `#EFEDE7` |
 | Cards, panels, inputs (secondary background) | `#FFFFFF` |
 | Text / secondary / muted | `#17171C` / `#3D3D47` / `#64646F` |
-| Borders | `#E4E1D8` |
+| Borders | `#DEDACD` |
 | Good / warning / problem | `#15803D` / `#A34D08` / `#B42318` |
 | Radius | 10 px (buttons 8 px) |
 
@@ -113,3 +118,146 @@ values into new code):
 - Text contrast meets WCAG AA (4.5:1). Status is never shown by color alone.
 - Check every screen at desktop width and at about 400 px.
 - UI work uses the `streamlit-ui-ux` skill.
+
+## The React app (`web/`)
+
+Arpit's design system of 2026-10-13: warm paper, one slate-blue accent, Geist type. Written as
+plain CSS in `web/src/theme.css`. Nothing is loaded from the internet: Geist and Geist Mono are
+copied into `web/public/fonts` (OFL) and the favicon is the square with a white tick.
+
+### Colour tokens
+
+| Token | Light | Dark | Use |
+| --- | --- | --- | --- |
+| `--paper` | `#F7F4EE` | `#141311` | App background |
+| `--card` | `#FFFDF8` | `#1C1B18` | Panels, rows, inputs |
+| `--sunk` | `#EFE9DE` | `#26241F` | Hover, selected row, notices |
+| `--line` | `#E4DDD1` | `#34312B` | Borders, dividers |
+| `--line-2` | `#D3CABB` | `#423E36` | Control and tag borders, a step stronger |
+| `--ink` | `#1C1A17` | `#F2EDE3` | Headings, job titles |
+| `--body` | `#44403A` | `#CFC8BB` | Paragraphs, descriptions |
+| `--muted` | `#6E675D` | `#978F82` | Captions, meta, labels |
+| `--accent` | `#2F4858` | `#8FB0CE` | Primary button, links, tab underline, score bars |
+| `--on-accent` | `#FFFDF8` | `#141311` | Text on the primary button |
+
+Dark mode is warm charcoal with a brown bias, never blue-black, and follows the OS
+(`prefers-color-scheme`).
+
+Score bands and status, each a text colour, a tint and a border (`--ok`, `--warn`, `--bad`,
+`--applied`, `--hidden`, each with `-wash` and `-line`):
+
+| Meaning | Light text / tint | Dark text / fill |
+| --- | --- | --- |
+| Strong fit (band `strong`) | `#2E5E45` / `#E3EDE6` | `#76B88D` / `#1C2A21` |
+| Worth a look (band `possible`) | `#7A5A16` / `#F2EAD6` | `#D3A95C` / `#2B2518` |
+| Reach and skill gaps (band `weak`, missing skills) | `#8C4A33` / `#F3E3DD` | `#DC8E78` / `#2E201B` |
+| Applied, saved | `#33516B` / `#E2E8EE` | `#8FB0CE` / `#1C2430` |
+| Hidden, rejected | `#6E675D` / `#EFE9DE` | `#978F82` / `#26241F` |
+
+The band words themselves come from `api/catalog.py` ("Strong fit", "Worth a look", "Reach"), so they
+stay the same as Streamlit's.
+
+Older names (`--surface`, `--wash`, `--ink-2`, `--hover`) are aliases of `--card`, `--sunk`,
+`--body` and `--sunk`, so every component reads the one palette.
+
+### Type, spacing, shape
+
+- Geist: 400 body, 500 UI (buttons, labels, tabs), 600 headings. 700 only for the score number.
+- Geist Mono: scores, fractions, counts, dates and file names, and the uppercase section labels
+  (`.label-mono`: SCORE BREAKDOWN, SKILLS, DESCRIPTION, the sidebar titles).
+- Scale: display 40 px (`.display`, and the score in the job pane), h1 28 px (the job title in
+  the pane), h2 20 px, title 16 px / 600 (job titles in the list, card titles). Body 15 px.
+- Reading width (`--measure`) 680 px, about 60 to 75 characters: posting text and prose pages.
+- Spacing steps `--s1` to `--s7`: 4, 8, 12, 16, 24, 32, 48 px. Cards pad 24 px.
+- Corners: 6 px tags and chips (`--r-sm`), 8 px controls (`--r`), 10 px cards (`--r-lg`). Never
+  pill-shaped.
+
+### Components
+
+- **Buttons**: 40 px tall, with an invisible 44 px tap area. Primary is filled slate blue with
+  light text; secondary is bordered on the card colour ("Score stored jobs", "Save", "Mark
+  applied"); tertiary is text only (`.quiet`, "Hide"); a link-styled action (`a.link`, "Open
+  posting"). Disabled is the sunk fill with muted text, for work in progress ("Scoring...").
+- **Inputs and selects**: 40 px, 8 px corners, label above in 500, help below in muted text.
+  Every control in one row has the same height, so they line up.
+- **Score**: the number in Geist Mono 700 (22 px in the list, 40 px in the pane) in the band's
+  colour, and under it a 24 px chip with the band word: the band's tint with a border of the same
+  hue. When a job's score was lowered because it is not open to you, a muted mono cap note sits
+  under the chip ("capped: not open to you").
+- **Skill tags**: always bordered, 24 px. A skill on your resume has a green tick; a gap is the
+  reach tint with the word "missing" in small mono. The word and the tick carry the meaning.
+- **Badges** (status, location, "1 skill short"): the same 24 px box as a tag, tinted by meaning.
+- **Tabs**: underline only, never pills or segments. The tab in use is ink with a 2 px accent
+  bar under it. The same style is used for the main tabs and the filters inside a tab
+  (Applications, Documents).
+- **Score bars**: label left, the fraction right in mono ("56 / 100"), a 6 px accent bar under
+  them on the sunk track, and a muted line saying what the part measures.
+- **Notices**: a tinted card with no border and body text inside (sunk, or the green, amber,
+  reach or slate tint for success, warning, problem and information).
+- **Empty states**: dashed frame, the icon on a small sunk tile, a title and the next step.
+- **Loading**: skeletons shaped like the content (the Matches list gets rows with a title, a
+  meta line, tags and a score), flat fills that breathe in opacity, no shimmer gradient; they
+  appear only after 200 ms. A thin indeterminate bar (a sliding segment, moved by transform) for
+  long work. No spinners.
+
+### Page frame
+
+- **Top bar**: the wordmark on the left, the five tabs in the centre, the resume file in use on
+  the right in mono. Opaque paper with a bottom hairline. Below 900 px the tabs move to a second
+  row that scrolls sideways, with the tab in use scrolled into view.
+- **Sidebar** (every tab but Matches): resume in use, language model, storage, as plain sections
+  split by hairlines under mono labels, not cards. Below 1000 px it moves under the main column.
+- **Headline numbers** (`.stats`): one card split by hairlines, values in mono, then the "Next
+  step" notice. Both are left out on Matches, which opens straight on its filters.
+- **Footer**: "Data stays on this laptop, in SQLite." on the left, Privacy and Terms on the right.
+- **Changing tab** scrolls to the top of the page and the new tab fades in.
+
+### Matches
+
+- **Filters** (one card): a row of four 40 px controls (Search, Your country, Status, Sort by),
+  then the sliders (minimum score, years), Source and the two checkboxes. On a narrow screen the
+  second group folds under "More filters". Under them, one line: the count and active filters on
+  the left; "Reset filters", "What the scores mean" (opens the guide) and "Score stored jobs" on
+  the right.
+- **List and job**: the list on the left and the job you picked on the right (`.split`). On a
+  wide screen (1120 px and up) the two columns sit in one screen-high frame and each scrolls on
+  its own; below that the job opens as a full-screen sheet with a "Back to the list" button
+  (Escape closes it too). The list is one bordered frame with rows split by hairlines. A row:
+  title (16 / 600), company and place, a meta line (age, source, years, status), the
+  score on the right, then badges and skill tags. The selected row has the sunk fill and a 2 px
+  accent bar on its left edge, never colour alone. The same job posted for several cities (same
+  company, title and score) is one row that says "N locations"; the job lists the cities.
+- **Job pane** (one card): the title as h1, the facts, location and years badges, and the score
+  on the right. Actions in one row: "Write cover letter" (primary), "Save", "Mark applied",
+  "Hide" (tertiary), "Open posting" (link); the Status select on its own line under them. Then
+  SCORE BREAKDOWN (the four parts in two groups, fit then reach, with the sentence from
+  `api/catalog.py` and the guide behind a summary) beside SKILLS (must have, nice to have,
+  keywords), and DESCRIPTION below (the snippet, or the whole posting on request).
+- Charts ("The jobs shown at a glance") and "Skills worth adding" follow the list.
+- The guide's numbers come from `matching/confidence_score.py` through `/api/catalog`, so they
+  cannot drift from Streamlit's.
+- **Job list keyboard**: `role="listbox"` with `role="option"` rows; arrow up and down move focus
+  and selection.
+- **Document title**: "Title - Company . Score | JobHunt AI" while a job is open.
+
+### Behaviour kept from before
+
+- **Header numbers** are read again on every tab change, so they agree with the list. Lists show
+  20 jobs and a "Show more" button and start again at the top when a filter changes. Lists and
+  cards set an explicit grid column (`minmax(0, 1fr)`), or a long title lays the card out wider
+  than its column.
+- **Facts under a title** (`c.Meta`): separated by a middle dot; a line breaks at a separator,
+  never inside a fact.
+- **Feedback**: a `.notice` under the control that caused it, which clears itself after a few
+  seconds. Never a traceback: the API sends a sentence and the screen shows it.
+- **Drafts**: the cover letter streams into the editor as the model writes it, with a Stop button.
+- Tab data is cached per key, so switching tabs shows the last data at once while it refetches.
+
+### Motion
+
+160 ms colour changes on hover; buttons press down 1 px; the tab underline grows in. State
+changes fade in with opacity and a 4 px rise in 200 ms (`.enter`): a new tab, another job, the
+phone sheet. Score bars grow from the left once. Only transform and opacity animate, and
+`.enter` uses fill mode `backwards` so no transform is left behind (a leftover transform would
+trap the fixed-position sheet inside the tab). Everything is switched off under
+`prefers-reduced-motion`. No scroll or cursor animation.

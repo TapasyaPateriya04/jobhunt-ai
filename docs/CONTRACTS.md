@@ -94,6 +94,37 @@ code MUST degrade gracefully when they are missing (tests run without them).
 - `matching/evaluation.py`: `precision_at_k`, `ndcg_at_k`, `rank`, `metrics` for `scripts/evaluate_matching.py`
   (labels in `eval/labeled_jobs.json`: 2 good, 1 partial, 0 bad).
 
+## api/ (owner: frontend) - the local HTTP layer the React app talks to
+Read and call only: every route calls a function above and adds no source, score or prompt.
+`api/server.py` binds uvicorn to 127.0.0.1 on `JOBHUNT_API_PORT` (8787); `api/main.py` serves
+`web/dist` when it has been built, and answers `FeatureUnavailable` with 503 and its message.
+- `api/core.py`: `load(module, attr=None)` (lazy import, raises `FeatureUnavailable`), `settings()`,
+  `repo()`, `jsonable(value)`, `g(dict, *keys)`, `score_of(match)`, `db_location(url)`, `llm_error(exc, action)`.
+- `api/catalog.py`: `SOURCES`, `DEFAULT_SOURCES`, `OPT_IN_SOURCES`, `MATCH_STATUSES`, `TRACKED_STATUSES`,
+  `BAND_LABELS`, `SCORE_PARTS`, `SCORE_GUIDE`, `DOC_TYPES`, `SORTS` and the wording the screens show.
+  Keys must match `ui/components.py` (`tests/test_api.py`), no string here names the scraping library,
+  and every score threshold is a placeholder filled at run time from `matching/confidence_score.py`.
+- `api/matching_view.py`: `annotate(matches, resume, country, cities)` (score, band, gap, location fit,
+  years, near miss), `detail(match, resume)`, `score_and_save(resume, country, cities)`,
+  `band_of(total)` and `thresholds()` (both read from `matching.confidence_score`),
+  `rescore_if_formula_changed(resume, country, cities)` (the `SCORING_VERSION` marker `ui/app.py`
+  writes, so whichever front end opens first does the work), `skills_to_learn(rows)`,
+  `home_country(country=None)`, `candidate_years(resume)`.
+- Routes, all under `/api`: `health`, `catalog`, `countries`, `status`, `overview`; `resumes`,
+  `resume`, `resume/upload`, `resume/{id}/skills`, `resume/{id}/score`; `jobs`, `jobs/search`,
+  `jobs/manual`, `jobs/linkedin-search-url`, `jobs/refresh-state`, `jobs/refresh`,
+  `housekeeping/stale`, `housekeeping/backup/{jobs|matches}`; `matches`, `matches/{id}`,
+  `matches/{id}/requirements`, `matches/{id}/status`, `skills-to-learn`; `documents/jobs`,
+  `documents/writer`, `documents/draft` (streams plain text), `documents/tidy`, `documents/check`,
+  `documents/save`, `documents`, `documents/export`, `documents/export-formats`.
+
+## web/ (owner: frontend) - the React app
+`npm run dev` serves it on 127.0.0.1:5173 and proxies `/api`; `npm run build` writes `web/dist`,
+which `api/main.py` then serves, so the finished app runs from one URL. `src/api.ts` holds every
+call and every type; `src/state.tsx` holds the resume in use, the country and the writing model;
+`src/theme.css` holds the tokens. The five tabs mirror the Streamlit ones, plus `/privacy` and
+`/terms`.
+
 ## ui/ (owner: frontend)
 - `ui/app.py` Streamlit with the four tabs from SPEC §7 (named Resume, Find jobs, Matches, Documents), wired to the
   functions above; persists to SQLite via db.repository; never shows raw exceptions/secrets.
