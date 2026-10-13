@@ -53,9 +53,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => get("/resume", resumeId ? { id: resumeId } : undefined),
     [resumeId, version],
   );
+  // The numbers at the top are read again on every tab change: jobs can land from another tab
+  // (a search, the timed refresh) without anything else telling this provider.
   const overview = useLoad<Overview>(
     () => get("/overview", resumeId ? { resume_id: resumeId } : undefined),
-    [resumeId, version],
+    [resumeId, version, tab],
   );
   const countries = useLoad<{ configured: string }>(() => get("/countries"), []);
 

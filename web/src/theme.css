@@ -53,6 +53,7 @@
   --sidebar: 272px;
   --shell: 1400px;
   --ease: 160ms ease-out;
+  --topbar-h: 49px;
 }
 
 * { box-sizing: border-box; }
@@ -94,8 +95,8 @@ a:hover { border-bottom-color: var(--accent-ink); }
   position: sticky;
   top: 0;
   z-index: 20;
-  background: color-mix(in srgb, var(--paper) 92%, transparent);
-  backdrop-filter: blur(6px);
+  /* Opaque: a see-through bar let the list text ghost through it while scrolling. */
+  background: var(--paper);
   border-bottom: 1px solid var(--line);
 }
 .topbar-inner {
@@ -328,10 +329,41 @@ label.check { display: flex; align-items: center; gap: 9px; font-size: 0.88rem; 
   grid-template-columns: minmax(0, 1fr);
   gap: var(--gap);
 }
+/* On a wide screen the list and the job each scroll on their own inside one screen-high
+   frame, so the job you picked stays in view however long its detail is. */
 @media (min-width: 1120px) {
-  .split { grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); align-items: start; }
-  .split .detail { position: sticky; top: 72px; max-height: calc(100vh - 92px); overflow: auto; }
+  .split {
+    grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+    height: calc(100vh - var(--topbar-h) - 16px);
+    scroll-margin-top: calc(var(--topbar-h) + 8px);
+  }
+  .split .joblist, .split .detail { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+  /* Rows keep their own height; without this the fixed-height grid squeezes them. */
+  .split .joblist { align-content: start; grid-auto-rows: max-content; padding: 2px 6px 12px 2px; }
+  .split .detail { padding: 0 4px 12px 0; }
 }
+
+/* Below that width the job opens as a sheet over the list, with a way back. */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--paper);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.sheet-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.sheet-body { padding: 14px 16px 32px; }
 
 .joblist {
   display: grid;
@@ -355,6 +387,7 @@ label.check { display: flex; align-items: center; gap: 9px; font-size: 0.88rem; 
 }
 .jobrow:hover { border-color: var(--line-2); box-shadow: var(--shadow-hi); }
 .jobrow[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.jobrow .places { color: var(--ink-2); font-weight: 500; }
 .jobrow .head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
 /* The text column must be allowed to shrink, or a long meta line pushes the score out. */
 .jobrow .head > :first-child { min-width: 0; flex: 1 1 auto; }
@@ -388,13 +421,13 @@ label.check { display: flex; align-items: center; gap: 9px; font-size: 0.88rem; 
   border-radius: 3px;
   overflow: hidden;
 }
-.bar .fill { height: 100%; background: var(--accent); border-radius: 3px; }
+.bar .fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 .bar .about { grid-column: 1 / -1; color: var(--muted); font-size: 0.78rem; }
 
 .countbars { display: grid; gap: 7px; }
 .countbar { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr auto; gap: 8px; align-items: center; font-size: 0.82rem; }
 .countbar .track { height: 8px; background: var(--wash); border-radius: 3px; overflow: hidden; }
-.countbar .fill { height: 100%; background: var(--accent-line); border-radius: 3px; }
+.countbar .fill { display: block; height: 100%; background: var(--accent-line); border-radius: 3px; }
 .countbar .n { font-family: var(--mono); color: var(--ink-2); }
 
 .badge {
@@ -474,7 +507,7 @@ label.check { display: flex; align-items: center; gap: 9px; font-size: 0.88rem; 
 @keyframes shift { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 .progress { height: 6px; background: var(--wash); border-radius: 3px; overflow: hidden; }
-.progress .fill { height: 100%; background: var(--accent); border-radius: 3px; animation: crawl 1.6s ease-in-out infinite; }
+.progress .fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; animation: crawl 1.6s ease-in-out infinite; }
 @keyframes crawl { 0% { width: 8%; } 50% { width: 72%; } 100% { width: 8%; } }
 
 /* ------------------------------------------------------------------ legal pages and footer */

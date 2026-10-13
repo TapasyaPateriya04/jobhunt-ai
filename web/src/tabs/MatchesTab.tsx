@@ -1,5 +1,5 @@
 /* Matches tab: the ranked list on the left, the job you picked on the right. */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { get, patch, post } from "../api";
 import type { Catalog, LearnList, Match, MatchDetail, MatchList } from "../api";
@@ -20,13 +20,36 @@ import {
   Working,
 } from "../components/ui";
 import { countLabel, Icon } from "../components/ui";
-import { message, plural, timeAgo, useFlash, useLoad } from "../hooks";
+import { message, plural, timeAgo, useFlash, useLoad, useMedia } from "../hooks";
 import { useApp } from "../state";
 
 const ANY_YEARS = 15; // top of the years slider: no limit
 const PAGE = 20; // jobs shown before "Show more", so a long list stays a short page
 const ALL = "All";
 const BLOCKED = ["restricted", "elsewhere"];
+const WIDE = "(min-width: 1120px)"; // list and job side by side; below it the job opens as a sheet
+
+/** One row of the list: a posting, plus the same posting re-listed for other cities. */
+type Group = { lead: Match; ids: number[]; places: string[] };
+
+/** Boards often post one job once per city. Same company, title and score is one row. */
+function groupMatches(rows: Match[]): Group[] {
+  const byKey = new Map<string, Group>();
+  const out: Group[] = [];
+  for (const match of rows) {
+    const key = [match.company, match.title].map((s) => s.trim().toLowerCase()).join("|") + `|${match.score}`;
+    const group = byKey.get(key);
+    if (group) {
+      group.ids.push(match.id);
+      if (match.location && !group.places.includes(match.location)) group.places.push(match.location);
+    } else {
+      const fresh = { lead: match, ids: [match.id], places: match.location ? [match.location] : [] };
+      byKey.set(key, fresh);
+      out.push(fresh);
+    }
+  }
+  return out;
+}
 
 type Filters = {
   query: string;
@@ -59,6 +82,8 @@ export function MatchesTab() {
   const [picked, setPicked] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters | null>(null);
   const [shownCount, setShownCount] = useState(PAGE);
+  const [sheet, setSheet] = useState(false);
+  const wide = useMedia(WIDE);
 
   const countries = useLoad<{ countries: string[]; configured: string }>(() => get("/countries"), []);
   const matches = useLoad<MatchList>(
@@ -94,6 +119,11 @@ export function MatchesTab() {
     }
   }
 
+  function changed() {
+    matches.reload();
+    reload();
+  }
+
   if (!resume || !resumeId) {
     return (
       <Empty
@@ -106,7 +136,9 @@ export function MatchesTab() {
 
   const all = matches.data?.matches ?? [];
   const shown = filters ? sortMatches(all.filter((m) => keep(m, filters, Boolean(country))), filters.sort) : [];
-  const selected = shown.find((m) => m.id === picked) ?? shown[0] ?? null;
+  const groups = groupMatches(shown);
+  const selectedGroup = groups.find((g) => picked !== null && g.ids.includes(picked)) ?? groups[0] ?? null;
+  const selected = selectedGroup?.lead ?? null;
 
   return (
     <>
@@ -193,32 +225,34 @@ export function MatchesTab() {
               <Charts shown={shown} />
               <div className="split">
                 <div className="joblist">
-                  {shown.slice(0, shownCount).map((match) => (
+                  {groups.slice(0, shownCount).map((group) => (
                     <JobRow
-                      key={match.id}
-                      match={match}
-                      selected={selected?.id === match.id}
-                      onPick={() => setPicked(match.id)}
+                      key={group.lead.id}
+                      group={group}
+                      selected={selected?.id === group.lead.id}
+                      onPick={() => {
+                        setPicked(group.lead.id);
+                        if (!wide) setSheet(true);
+                      }}
                     />
                   ))}
-                  {shownCount < shown.length && (
+                  {shownCount < groups.length && (
                     <button type="button" onClick={() => setShownCount(shownCount + PAGE)}>
-                      Show {Math.min(PAGE, shown.length - shownCount)} more
+                      Show {Math.min(PAGE, groups.length - shownCount)} more
                     </button>
                   )}
                 </div>
-                <div className="detail">
-                  {selected && (
-                    <Detail
-                      match={selected}
-                      onChanged={() => {
-                        matches.reload();
-                        reload();
-                      }}
-                    />
-                  )}
-                </div>
+                {wide && (
+                  <div className="detail">
+                    {selectedGroup && <Detail group={selectedGroup} onChanged={changed} />}
+                  </div>
+                )}
               </div>
+              {!wide && sheet && selectedGroup && (
+                <Sheet onClose={() => setSheet(false)}>
+                  <Detail group={selectedGroup} onChanged={changed} />
+                </Sheet>
+              )}
             </>
           )}
 
@@ -477,7 +511,9 @@ function Charts({ shown }: { shown: Match[] }) {
   );
 }
 
-function JobRow({ match, selected, onPick }: { match: Match; selected: boolean; onPick: () => void }) {
+function JobRow({ group, selected, onPick }: { group: Group; selected: boolean; onPick: () => void }) {
+  const match = group.lead;
+  const many = group.places.length > 1;
   return (
     <button type="button" className="jobrow" aria-current={selected} onClick={onPick}>
       <span className="head">
@@ -487,12 +523,20 @@ function JobRow({ match, selected, onPick }: { match: Match; selected: boolean; 
           <Meta
             parts={[
               match.company,
-              match.location,
+              many ? null : match.location,
               timeAgo(match.posted_date),
               match.source_name,
               match.years !== null ? `asks ${countLabel(match.years, "year")}` : null,
             ]}
           />
+          {many && (
+            <>
+              <br />
+              <span className="meta places" title={group.places.join("; ")}>
+                {countLabel(group.places.length, "location")}
+              </span>
+            </>
+          )}
         </span>
         <Score value={match.score} band={match.band} label={match.band_label} />
       </span>
@@ -520,11 +564,42 @@ function JobRow({ match, selected, onPick }: { match: Match; selected: boolean; 
   );
 }
 
+/** The job over the whole screen on a phone, closed with Back or Escape. */
+function Sheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const back = useRef<HTMLButtonElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  // Runs once per opening: focus moves to Back, and returns to the row when the sheet closes.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    back.current?.focus();
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && close.current();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+      opener?.focus();
+    };
+  }, []);
+  return (
+    <div className="sheet" role="dialog" aria-modal="true" aria-label="Job details">
+      <div className="sheet-bar">
+        <button type="button" className="small" ref={back} onClick={onClose}>
+          Back to the list
+        </button>
+      </div>
+      <div className="sheet-body">{children}</div>
+    </div>
+  );
+}
+
 function statusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-function Detail({ match, onChanged }: { match: Match; onChanged: () => void }) {
+function Detail({ group, onChanged }: { group: Group; onChanged: () => void }) {
+  const match = group.lead;
   const { resumeId, catalog, model, setTab, writeDocumentsFor } = useApp();
   const [note, tone, flash] = useFlash();
   const [busy, setBusy] = useState(false);
@@ -607,6 +682,11 @@ function Detail({ match, onChanged }: { match: Match; onChanged: () => void }) {
           {match.years !== null && <span className="badge">asks {countLabel(match.years, "year")}</span>}
           {match.status !== "new" && <span className="badge accent">{statusLabel(match.status)}</span>}
         </div>
+        {group.places.length > 1 && (
+          <p className="hint" style={{ marginTop: 8 }}>
+            Posted for {countLabel(group.places.length, "location")}: {group.places.join("; ")}
+          </p>
+        )}
         <hr className="divider" />
         <div className="row tight">
           <button

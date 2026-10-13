@@ -91,3 +91,16 @@ export function timeAgo(value: string | null): string {
 export function plural(n: number, one: string, many?: string): string {
   return n === 1 ? one : many ?? `${one}s`;
 }
+
+/** True while the media query matches, kept current as the window is resized. */
+export function useMedia(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const list = window.matchMedia(query);
+    const update = () => setMatches(list.matches);
+    update();
+    list.addEventListener("change", update);
+    return () => list.removeEventListener("change", update);
+  }, [query]);
+  return matches;
+}

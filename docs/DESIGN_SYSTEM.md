@@ -144,8 +144,14 @@ Patterns, beyond the ones above:
   the sidebar moves under the tabs; below 768 px every grid is one column.
 - **Tabs**: the same segmented bar as Streamlit. On a phone the bar scrolls and the tab in use
   is scrolled into view.
-- **Matches**: a list on the left and the job you picked on the right (`.split`), the detail
-  pane sticky on a wide screen. The selected row carries an indigo border, never colour alone.
+- **Matches**: a list on the left and the job you picked on the right (`.split`). On a wide
+  screen (1120 px and up) the two columns sit in one screen-high frame and each scrolls on its
+  own; below that the job opens as a full-screen sheet with a "Back to the list" button (Escape
+  closes it too). The selected row carries an indigo border, never colour alone. The same job
+  posted for several cities (same company, title and score) is one row that says "N locations";
+  the detail lists the cities.
+- **Top bar**: opaque paper with a bottom hairline, so nothing shows through it while scrolling.
+- **Header numbers** are read again on every tab change, so they agree with the list.
   The list shows 20 jobs and a "Show more" button, as the Streamlit one does, and starts again
   at the top when a filter changes. Lists and cards set an explicit grid column
   (`minmax(0, 1fr)`), or a long title lays the card out wider than its column.
