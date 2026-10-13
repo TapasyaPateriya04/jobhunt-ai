@@ -4,9 +4,14 @@ import { ApiError } from "./api";
 
 type Load<T> = { data: T | null; error: string; loading: boolean; reload: () => void };
 
-/** Load something from the API, with a reload the screens call after they change it. */
-export function useLoad<T>(fetcher: () => Promise<T>, deps: unknown[], enabled = true): Load<T> {
-  const [data, setData] = useState<T | null>(null);
+// Last answer per cache key, kept for the life of the page. A tab that is opened again shows
+// what it had at once and reads the server again behind it, instead of a blank skeleton.
+const cache = new Map<string, unknown>();
+
+/** Load something from the API, with a reload the screens call after they change it.
+ *  With a cache key (which must name every dep), a remounted screen starts from its last data. */
+export function useLoad<T>(fetcher: () => Promise<T>, deps: unknown[], enabled = true, cacheKey?: string): Load<T> {
+  const [data, setData] = useState<T | null>(() => (cacheKey ? ((cache.get(cacheKey) as T) ?? null) : null));
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(enabled);
   const [tick, setTick] = useState(0);
@@ -30,9 +35,11 @@ export function useLoad<T>(fetcher: () => Promise<T>, deps: unknown[], enabled =
     }
     let current = true;
     setLoading(true);
+    if (cacheKey && cache.has(cacheKey)) setData(cache.get(cacheKey) as T);
     call
       .current()
       .then((value) => {
+        if (cacheKey) cache.set(cacheKey, value);
         if (current && alive.current) {
           setData(value);
           setError("");
@@ -48,7 +55,7 @@ export function useLoad<T>(fetcher: () => Promise<T>, deps: unknown[], enabled =
       current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, enabled, tick]);
+  }, [...deps, enabled, tick, cacheKey]);
 
   const reload = useCallback(() => setTick((n) => n + 1), []);
   return { data, error, loading, reload };

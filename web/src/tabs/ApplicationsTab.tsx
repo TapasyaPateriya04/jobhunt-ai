@@ -18,6 +18,7 @@ export function ApplicationsTab() {
     () => get("/matches", { resume_id: resumeId, country: country ?? "" }),
     [resumeId, country],
     Boolean(resumeId),
+    `matches:${resumeId}:${country ?? ""}`,
   );
 
   if (!resume || !resumeId) {

@@ -21,7 +21,7 @@ export function JobsTab() {
   const [note, tone, flash] = useFlash();
   const [shown, setShown] = useState(PAGE);
 
-  const stored = useLoad<{ jobs: Job[] }>(() => get("/jobs", { limit: 50 }), [], true);
+  const stored = useLoad<{ jobs: Job[] }>(() => get("/jobs", { limit: 50 }), [], true, "jobs:50");
 
   // The first search starts from the resume and .env, then the user's own text wins.
   useEffect(() => {

@@ -113,8 +113,6 @@ a:hover { border-bottom-color: var(--accent-ink); }
 .topbar .spacer { flex: 1 1 auto; }
 .topbar .note { color: var(--muted); font-size: 0.82rem; }
 
-.lede { color: var(--ink-2); max-width: 66ch; margin: 18px 0 0; }
-
 .layout {
   display: grid;
   grid-template-columns: var(--sidebar) minmax(0, 1fr);

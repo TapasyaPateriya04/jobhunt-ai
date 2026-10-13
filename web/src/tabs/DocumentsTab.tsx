@@ -22,6 +22,7 @@ export function DocumentsTab() {
     () => get("/documents/jobs", { resume_id: resumeId }),
     [resumeId],
     Boolean(resumeId),
+    `documents-jobs:${resumeId}`,
   );
   const writer = useLoad<{ ready: boolean; note: string }>(
     () => get("/documents/writer", { model: model ?? "" }),

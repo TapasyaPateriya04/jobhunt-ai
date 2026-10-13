@@ -102,12 +102,7 @@ function Dashboard() {
         <span className="note">Everything stays on this machine</span>
       </TopBar>
       <main className="shell">
-        <h1 style={{ marginTop: 24 }}>JobHunt AI</h1>
-        <p className="lede">
-          Find the jobs you can actually get, track your applications and write for each one.
-        </p>
-
-        <div className="layout">
+        <div className="layout" style={{ marginTop: 24 }}>
           <Sidebar />
           <div className="main">
             {health.data?.database_problem && <Notice tone="bad">{health.data.database_problem}</Notice>}

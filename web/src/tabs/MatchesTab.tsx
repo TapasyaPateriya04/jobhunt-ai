@@ -85,11 +85,12 @@ export function MatchesTab() {
   const [sheet, setSheet] = useState(false);
   const wide = useMedia(WIDE);
 
-  const countries = useLoad<{ countries: string[]; configured: string }>(() => get("/countries"), []);
+  const countries = useLoad<{ countries: string[]; configured: string }>(() => get("/countries"), [], true, "countries");
   const matches = useLoad<MatchList>(
     () => get("/matches", { resume_id: resumeId, country: country ?? "" }),
     [resumeId, country],
     Boolean(resumeId),
+    `matches:${resumeId}:${country ?? ""}`,
   );
 
   const years = matches.data?.candidate_years ?? 0;
@@ -238,7 +239,7 @@ export function MatchesTab() {
                   ))}
                   {shownCount < groups.length && (
                     <button type="button" onClick={() => setShownCount(shownCount + PAGE)}>
-                      Show {Math.min(PAGE, groups.length - shownCount)} more
+                      Show {Math.min(PAGE, groups.length - shownCount)} more ({groups.length - shownCount} left)
                     </button>
                   )}
                 </div>
@@ -828,6 +829,7 @@ function SkillsToLearn() {
     () => get("/skills-to-learn", { resume_id: resumeId, country: country ?? "" }),
     [resumeId, country],
     Boolean(resumeId),
+    `learn:${resumeId}:${country ?? ""}`,
   );
   if (!learn.data) return null;
   const { skills, jobs, near_count } = learn.data;

@@ -1,6 +1,6 @@
 /* The small pieces every screen is built from: panels, chips, bars, notices.
    Icons are inline SVG on a 16 px grid, so the app loads no icon font. */
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { plural } from "../hooks";
@@ -245,7 +245,15 @@ export function Field({
   );
 }
 
+/** Placeholder rows, shown only when loading takes longer than 200 ms so a quick answer
+ *  does not flash grey boxes first. */
 export function Skeleton({ rows = 3 }: { rows?: number }) {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLate(true), 200);
+    return () => window.clearTimeout(timer);
+  }, []);
+  if (!late) return null;
   return (
     <div className="stack" aria-hidden="true">
       {Array.from({ length: rows }).map((_, i) => (
