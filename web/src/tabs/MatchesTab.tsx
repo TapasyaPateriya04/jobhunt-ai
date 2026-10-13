@@ -24,6 +24,7 @@ import { message, plural, timeAgo, useFlash, useLoad } from "../hooks";
 import { useApp } from "../state";
 
 const ANY_YEARS = 15; // top of the years slider: no limit
+const PAGE = 20; // jobs shown before "Show more", so a long list stays a short page
 const ALL = "All";
 const BLOCKED = ["restricted", "elsewhere"];
 
@@ -57,6 +58,7 @@ export function MatchesTab() {
   const [note, tone, flash] = useFlash();
   const [picked, setPicked] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters | null>(null);
+  const [shownCount, setShownCount] = useState(PAGE);
 
   const countries = useLoad<{ countries: string[]; configured: string }>(() => get("/countries"), []);
   const matches = useLoad<MatchList>(
@@ -164,11 +166,17 @@ export function MatchesTab() {
           {filters && catalog && (
             <FilterPanel
               filters={filters}
-              setFilters={setFilters}
+              setFilters={(next) => {
+                setFilters(next);
+                setShownCount(PAGE); // a new filter starts the list again
+              }}
               catalog={catalog}
               data={matches.data!}
               hasCountry={Boolean(country)}
-              onReset={() => setFilters(defaults(years, Boolean(country)))}
+              onReset={() => {
+                setFilters(defaults(years, Boolean(country)));
+                setShownCount(PAGE);
+              }}
             />
           )}
 
@@ -185,7 +193,7 @@ export function MatchesTab() {
               <Charts shown={shown} />
               <div className="split">
                 <div className="joblist">
-                  {shown.map((match) => (
+                  {shown.slice(0, shownCount).map((match) => (
                     <JobRow
                       key={match.id}
                       match={match}
@@ -193,6 +201,11 @@ export function MatchesTab() {
                       onPick={() => setPicked(match.id)}
                     />
                   ))}
+                  {shownCount < shown.length && (
+                    <button type="button" onClick={() => setShownCount(shownCount + PAGE)}>
+                      Show {Math.min(PAGE, shown.length - shownCount)} more
+                    </button>
+                  )}
                 </div>
                 <div className="detail">
                   {selected && (

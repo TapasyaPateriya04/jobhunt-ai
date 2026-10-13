@@ -146,6 +146,13 @@ Patterns, beyond the ones above:
   is scrolled into view.
 - **Matches**: a list on the left and the job you picked on the right (`.split`), the detail
   pane sticky on a wide screen. The selected row carries an indigo border, never colour alone.
+  The list shows 20 jobs and a "Show more" button, as the Streamlit one does, and starts again
+  at the top when a filter changes. Lists and cards set an explicit grid column
+  (`minmax(0, 1fr)`), or a long title lays the card out wider than its column.
+- **Facts under a title** (`c.Meta`): company, place, age, source and years, separated by a
+  middle dot. A line breaks at a separator, never inside a fact.
+- **Changing tab** scrolls back to the tab bar, so a new tab starts at its own top after a
+  long list.
 - **Score breakdown**: the four parts in two groups, fit then reach, one bar each with its value
   out of 100 and a line saying what the part measures, under the sentence from `api/catalog.py`.
   A "What the scores mean" panel on the Matches tab, and the same guide behind a summary in each

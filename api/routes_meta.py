@@ -128,15 +128,19 @@ def get_overview(resume_id: int | None = None) -> dict:
     return {
         "has_resume": bool(resume),
         "stats": [
-            {"value": jobs, "label": "jobs collected"},
+            {"value": jobs, "label": _plural(jobs, "job collected", "jobs collected")},
             {"value": len(matches), "label": "scored for this resume"},
-            {"value": strong, "label": "strong matches"},
+            {"value": strong, "label": _plural(strong, "strong match", "strong matches")},
             {"value": counts["saved"], "label": "saved"},
             {"value": counts["applied"], "label": "applied"},
         ],
         "counts": counts,
         "next_step": next_step(bool(resume), jobs, matches),
     }
+
+
+def _plural(n: int, one: str, many: str) -> str:
+    return one if n == 1 else many
 
 
 def next_step(has_resume: bool, jobs: int, matches: list) -> dict:

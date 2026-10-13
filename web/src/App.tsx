@@ -1,5 +1,6 @@
 /* The page frame: the bar at the top, the numbers and next step, the five tabs,
    the sidebar and the footer that links the legal pages. */
+import { useEffect, useRef } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 
 import { get } from "./api";
@@ -79,6 +80,19 @@ function LegalPage({ children }: { children: React.ReactNode }) {
 
 function Dashboard() {
   const { tab, setTab, overview, error } = useApp();
+  const tabs = useRef<HTMLDivElement>(null);
+  const picked = useRef(false);
+
+  // A long list leaves the page far down, so a new tab starts at its own top. The scroll
+  // runs after the new tab has rendered, or it would aim at the old content's height.
+  useEffect(() => {
+    if (!picked.current) return;
+    const frame = requestAnimationFrame(() => {
+      const top = (tabs.current?.getBoundingClientRect().top ?? 0) + window.scrollY - 64;
+      if (window.scrollY > top) window.scrollTo({ top, behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [tab]);
   const health = useLoad<{ database_problem: string }>(() => get("/health"), []);
   const counts = overview?.counts ?? {};
 
@@ -128,18 +142,24 @@ function Dashboard() {
               </>
             )}
 
-            <div className="tabs" role="tablist" aria-label="What you want to do">
+            <div className="tabs" role="tablist" aria-label="What you want to do" ref={tabs}>
               {TABS.map((entry) => (
                 <button
                   type="button"
                   role="tab"
                   key={entry.key}
                   aria-selected={tab === entry.key}
-                  // On a phone the bar scrolls, so the tab in use is brought into view.
-                  ref={(node) =>
-                    tab === entry.key && node?.scrollIntoView({ inline: "center", block: "nearest" })
-                  }
-                  onClick={() => setTab(entry.key)}
+                  // On a phone the bar scrolls sideways, so the tab in use is brought into
+                  // view. Only the bar moves: scrollIntoView would scroll the page as well.
+                  ref={(node) => {
+                    if (tab !== entry.key || !node) return;
+                    const bar = node.parentElement;
+                    if (bar) bar.scrollLeft = node.offsetLeft - (bar.clientWidth - node.clientWidth) / 2;
+                  }}
+                  onClick={() => {
+                    picked.current = true;
+                    setTab(entry.key);
+                  }}
                 >
                   {entry.label}
                   {badge(entry.key, counts) !== null && <span className="tab-count">{badge(entry.key, counts)}</span>}

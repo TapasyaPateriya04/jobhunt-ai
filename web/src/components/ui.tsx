@@ -1,5 +1,6 @@
 /* The small pieces every screen is built from: panels, chips, bars, notices.
    Icons are inline SVG on a 16 px grid, so the app loads no icon font. */
+import { Fragment } from "react";
 import type { ReactNode } from "react";
 
 import { plural } from "../hooks";
@@ -274,10 +275,12 @@ export function Meta({ parts }: { parts: (string | null | undefined)[] }) {
   return (
     <span className="meta">
       {shown.map((part, i) => (
-        <span key={`${part}-${i}`}>
-          {i > 0 && <span className="sep">·</span>}
-          {part}
-        </span>
+        <Fragment key={`${part}-${i}`}>
+          {/* The separator is its own element, and carries the spaces: a long line can only
+              break here, never inside a fact like "Pune District, Maharashtra, India". */}
+          {i > 0 && <span className="sep"> · </span>}
+          <span>{part}</span>
+        </Fragment>
       ))}
     </span>
   );
@@ -297,11 +300,12 @@ export function countLabel(n: number, one: string, many?: string): string {
   return `${n} ${plural(n, one, many)}`;
 }
 
-/** A posting's text as paragraphs and bullet lists, with no HTML from the source trusted. */
+/** A posting's text as paragraphs and bullet lists, with no HTML from the source trusted.
+ *  Postings often carry Markdown marks (**Experience:** 7 years), which are dropped here. */
 export function Posting({ text }: { text: string }) {
   const blocks: { kind: "p" | "ul" | "h"; lines: string[] }[] = [];
   for (const raw of text.split(/\n+/)) {
-    const line = raw.trim();
+    const line = raw.replace(/\*\*|__|`/g, "").trim();
     if (!line) continue;
     const bullet = line.match(/^(?:[-*•·‣▪●]|\d{1,2}[.)])\s+(.*)$/);
     const heading = line.length < 60 && /[:：]$/.test(line);

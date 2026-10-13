@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { post, uploadResume } from "../api";
 import type { Resume } from "../api";
 import { countLabel, Chips, Empty, Field, Notice, Panel, Working } from "../components/ui";
-import { message, useFlash } from "../hooks";
+import { message, plural, useFlash } from "../hooks";
 import { useApp } from "../state";
 
 const ACCEPT = ".tex,.txt,.md,.pdf";
@@ -136,11 +136,11 @@ function ResumeDetail({ resume }: { resume: Resume }) {
       <div className="stats">
         <div>
           <b>{resume.skill_count}</b>
-          <span>skills</span>
+          <span>{plural(resume.skill_count, "skill")}</span>
         </div>
         <div>
           <b>{resume.experience_count}</b>
-          <span>experience entries</span>
+          <span>{plural(resume.experience_count, "experience entry", "experience entries")}</span>
         </div>
         <div>
           <b>{resume.years}</b>

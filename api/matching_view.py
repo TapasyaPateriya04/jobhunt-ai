@@ -6,6 +6,7 @@ change a single score.
 """
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -238,5 +239,7 @@ def _num(value):
 
 
 def _snippet(text: str, limit: int = 240) -> str:
-    s = " ".join(str(text or "").split())
+    """First sentences of a posting on one line, without the Markdown marks many carry."""
+    s = re.sub(r"\*\*|__|`|#{1,6}\s*", "", str(text or ""))
+    s = " ".join(s.split())
     return s if len(s) <= limit else s[:limit].rsplit(" ", 1)[0] + "..."
